@@ -179,9 +179,9 @@ typedef struct
 #define AP_AUTO (1)
 #define AP_CLR_STATUS (1)
 
-#define PIC_ALL_SEND (1)
+#define PIC_ALL_SEND (0)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (1)
+#define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE (1)
 #define MFOUR_SIM_MODE_BMP (0)
 
@@ -71596,6 +71596,7 @@ static int p8(struct procRes_s *rs)
 #define DBG_USB_HS (0)
 #define DBG_USB_FLW (0)
 #define USB_POLLTIME_US (1000)
+#define SIM_NUM 8
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
@@ -71613,7 +71614,22 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char *ptm=0, *pcur=0, *addr=0, *pt=0;
     char chr=0, opc=0, dat=0, chq=0, ch=0;
     char cplls[8];
-    char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x11, 0x22, 0x33, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+    char usbextra[4] = {0x59, 0x4c, 0x00, 0x00};
+    char *ptmetas=0;
+    char usbmetas[160] = {0x41 ,0x53 ,0x50 ,0x43 ,0xf0 ,0x07 ,0x05 ,0x00 ,0x00 ,0x14 ,0xc0 ,0x40 ,0x05 ,0x02 ,0x00 ,0x01 
+                             ,0x00 ,0x01 ,0x04 ,0x00 ,0x22 ,0x22 ,0x00 ,0x00 ,0x01 ,0x05 ,0x40 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
+                             ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
+                             ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00
+                             ,0x00 ,0xbc ,0x01 ,0x59 ,0x01 ,0x00 ,0x07 ,0xeb ,0x01 ,0x26 ,0x07 ,0xeb ,0x04 ,0xd2 ,0x06 ,0x73
+                             ,0x04 ,0x8c ,0x00 ,0x02 ,0x04 ,0x60 ,0x00 ,0x02 ,0x04 ,0x4e ,0x00 ,0x0a ,0x04 ,0x8e ,0x00 ,0x0a
+                             ,0x04 ,0x3e ,0x00 ,0x12 ,0x04 ,0x8e ,0x00 ,0x12 ,0x00 ,0xfe ,0x07 ,0xd1 ,0x01 ,0x70 ,0x07 ,0xd1 
+                             ,0x00 ,0xfe ,0x07 ,0xd9 ,0x01 ,0x54 ,0x07 ,0xd9 ,0x01 ,0x00 ,0x07 ,0xe1 ,0x01 ,0x3c ,0x07 ,0xe1 
+                             ,0x01 ,0x00 ,0x07 ,0xe9 ,0x01 ,0x26 ,0x07 ,0xe9 ,0x08 ,0x10 ,0x08 ,0x00 ,0x20 ,0x07 ,0x00 ,0x3f 
+                             ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00}; 
+    uint32_t simdatas[SIM_NUM] = {0x000800a0, 0x000800a0, 0x000800a0, 0x000800a0, 0x000800a0, 0x000800a0, 0x000800a0, 0x000800a0};
+    uint32_t simextra[SIM_NUM] = {0x08080004, 0x08080004, 0x08080004, 0x08080004, 0x08080004, 0x08080004, 0x08080004, 0x08280004};
+    int simcnt=0;
+    char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x20, 0x14, 0x20, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     char *pkcbw=0;
     int usbid=0;
@@ -71677,6 +71693,26 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
     sprintf_f(rs->logs, "enter usbhostd \n");
     print_f(rs->plogs, sp, rs->logs);
+
+    ptmetas = malloc(256);
+    memset(ptmetas, 0x0, 256);
+
+    if (strcmp("P9", sp) == 0) {
+        sprintf_f(rs->logs, "P9 is pri \n");
+        print_f(rs->plogs, sp, rs->logs);
+
+        memcpy(ptmetas, usbmetas, 160);
+
+        ptmetas[15] = 0x0;
+        
+    } else {
+        sprintf_f(rs->logs, "P10 is sec \n");
+        print_f(rs->plogs, sp, rs->logs);
+
+        memcpy(ptmetas, usbmetas, 160);
+        
+        ptmetas[15] = 0x1;
+    }
 
 #if 1
     puhsinfom[0] = rs->pusbmh[0];
@@ -72605,7 +72641,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             break;
         }
 
-        #if DBG_USB_HS
+        #if 1//DBG_USB_HS
         sprintf_f(rs->logs, "cmdchr: 0x%.2x \n", cmdchr);
         print_f(rs->plogs, sp, rs->logs);
         #endif
@@ -73016,7 +73052,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             usbfolw = 0;
            
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, 0x4e, 0x00);
-            usb_send(CBW, usbid, 31);
+            ptret = usb_send(CBW, usbid, 31);
+
+            sprintf_f(rs->logs, "send 31 bytes, ret: %d dump:\n", ptret); 
+            print_f(rs->plogs, sp, rs->logs);
+            
+            shmem_dump(CBW, 31);
                 
             ptret = usb_read(ptrecv, usbid, 13);
             if (ptret > 0) {
@@ -73045,12 +73086,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             usbfolw = 0;
 
-            #if 1 /* test code before MCU ready */
-            if (opc == 0x0f) {
-                //opc = 0x0a;
-                opc = 0x0e;
-            }
-            #endif
+            #if 0 /* warm up */
+            opc = 0x10;
             
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             memcpy(&pkcbw[0], CBW, 32);
@@ -73061,19 +73098,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             insert_cbw(CBW, CBW_CMD_STOP_SCAN, opc, dat);
             memcpy(&pkcbw[64], CBW, 32);            
 
-#if 0
-            insert_cbw(CBW, 0x13, opc, dat);
-            memcpy(&pkcbw[96], CBW, 32);            
-
-            insert_cbw(CBW, 0x11, opc, dat);
-            memcpy(&pkcbw[128], CBW, 32);            
-#else
             insert_cbw(CBW, 0x14, opc, dat);
             memcpy(&pkcbw[96], CBW, 32);            
 
             insert_cbw(CBW, 0x15, opc, dat);
             memcpy(&pkcbw[128], CBW, 32);            
-#endif
 
             /* start loop */
             ptret = USB_IOCT_LOOP_RESET(usbid, &bitset);
@@ -73086,8 +73115,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             sprintf(rs->logs, "__USB_DEV_ SCAN_START[%s][%s]__", sp, puhsinfo->ushostname); 
             ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
+            #endif
+            
             thrtimecost = (CFLOAT)ret;
-                    
+            simcnt = 0;
+            
             puhsinfo->ushostbtrktot = 0;
             puhsinfo->ushostbtrkcms = 0;
             puhsinfo->ushostbtrkbuffed = 0;
@@ -73101,17 +73133,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             pieRet = write(pPrx[1], &chq, 1);
         }
         else if (cmdchr == 0x19) {
-                    
-            #if USB_HS_SAVE_RESULT
-            fsave = find_save(ptfilepath, ptfileSave);
-            if (!fsave) {
-                goto end;    
-            }
-
-            bufmax = 8*1024*1024;
-            pImage = malloc(bufmax);
-            pcur = pImage;
-            #endif
 
             recvsz = 0;
             acusz = 0;
@@ -73135,18 +73156,16 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 #endif
                 
                 #if USB_CALLBACK_LOOP 
-
-                
-                recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
-                //smp_mb();
-
-                
+                //recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
+                recvsz = simextra[simcnt%SIM_NUM];
+                simcnt ++;
+                usleep(10000);
                 #else
                 recvsz = usb_read(addr, usbid, len);
                 #endif
 
-                #if 0
-                sprintf_f(rs->logs, "usb read 0x%.8x, flow: %d, run: %d - 0x07 \n", recvsz, usbfolw, usbrun);
+                #if 1
+                sprintf_f(rs->logs, "usb read 0x%.8x, flow: %d, run: %d - 0x107 \n", recvsz, usbfolw, usbrun);
                 print_f(rs->plogs, sp, rs->logs);
                 #endif
                 
@@ -73191,15 +73210,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                         //sprintf_f(rs->logs, "get the error status: 0x%.2x (org: 0x%.2x)\n", cswst, csworg & 0x7f);
                         //print_f(rs->plogs, sp, rs->logs);
-
-                        #if 0 /* stop scan if get error status */
-                        if ((cswst & 0x7f) && (cswst != 0x7f)) {
-                        
-                            puhs->pushcswerr = cswst;
-                            
-                            chr = 'R';                        
-                        }
-                        #endif
                     } 
 
                     if (recvsz & 0x20000) {
@@ -73217,13 +73227,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                         recvsz = recvsz  & 0x1ffff;
                         usbrun = -1;
-
-                        #if 1 /* stop scan by default status */
-                        if (cswst == 0x7f) {
-                            cswst = 0x21;                        
-                            puhs->pushcswerr = cswst;
-                        }
-                        #endif
                         
                         //sprintf_f(rs->logs, "use the error status: 0x%.2x recv: %d\n", cswst, recvsz);
                         //print_f(rs->plogs, sp, rs->logs);
@@ -73239,31 +73242,16 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     else {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-
-                        #if 1//DBG_USB_HS
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m1\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
                     }
                 }
                 else {
                     if (recvsz > 0) {
                         usbrun = recvsz  & 0xffff;
                         recvsz = len;
-
-
-                        #if 1//DBG_USB_HS
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - m2\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
                     }
                 }
 
                 if (recvsz > 0) {
-                    
-                    #if USB_HS_SAVE_RESULT
-                    memcpy(pcur, addr, recvsz);
-                    #endif
 
                     #if SMP_EN
                     ix = buffstep % RING_BUFF_NUM_USB;
@@ -73271,6 +73259,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     msync(ptm, USB_BUF_SIZE, MS_SYNC);
                     asp_mem_barrier();
+
+                    memset(ptm, 0x0, USB_BUF_SIZE);
+                    memcpy(ptm, usbextra, 4);
                     
                     memcpy(addr, ptm, USB_BUF_SIZE);
 
@@ -73295,105 +73286,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     puhsinfo->ushostbtrkcms = usbfolw;
                     puhsinfo->ushostbtrkbuffed = puhsinfo->ushostbtrktot - usbfolw;
                     usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
-
-                    #if 0//USB_AUTO_PAUSE
-                    msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                    msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-                    
-                    upa = puhsinfo->ushostpause;
-                    ufr = puhsinfrd->ushostpause;
-                    
-                    ure = puhsinfo->ushostresume;
-                    ufo = puhsinfrd->ushostresume;
-                    
-                    //sprintf_f(rs->logs, "pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d m\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
-                    //print_f(rs->plogs, sp, rs->logs);
-                    
-                    if (!upa) {
-                        ix = upa;
-                        
-                        if (ufr == 1) {
-                            USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                            puhsinfo->ushostpause = 1;
-                    
-                            #if DBG_PAUSE_RESUME
-                            sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- m0\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
-                            print_f(rs->plogs, sp, rs->logs);
-                            #endif
-                        }
-                        else if (puhsinfo->ushostbpagecnt == 0) {
-                            if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
-                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                                puhsinfo->ushostpause = 1;
-                    
-                                #if DBG_PAUSE_RESUME
-                                sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - m1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
-                                print_f(rs->plogs, sp, rs->logs);
-                                #endif
-                            }
-                        } else {
-                            usbuffed = puhsinfo->ushostbtrkbuffed;
-                            usbavg = puhsinfo->ushostbtrkpageavg;
-                            usbdist = usbufmax - usbuffed;
-                            usbthrhld = usbavg * 2 + 50;
-                            if (usbavg) {
-                                if (usbavg > puhsinfo->ushostbthrshold) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                    
-                                    puhsinfo->ushostpause = 1;
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d system thrshold: %d, avgpage: %d - m2.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbtrkpageavg);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }             
-                                else if (usbdist < usbthrhld) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                    
-                                    puhsinfo->ushostpause = 1;
-                                    
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d avg thrshold: %d, avgpage: %d - m2.2\n", usbdist, usbthrhld, puhsinfo->ushostbtrkpageavg);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }                
-                            }
-                            else {
-                                if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                                    puhsinfo->ushostpause = 1;
-                    
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - m1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }
-                                else if (usbdist < (puhsinfo->ushostbthrshold * 2)) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                    
-                                    puhsinfo->ushostpause = 1;
-                                    
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d thrshold/2: %d - m3\n", usbdist, (puhsinfo->ushostbthrshold / 2));
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }
-                            }
-                        }
-                    }
-                    else if (upa == 2) {
-                        USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                        puhsinfo->ushostpause += 1;
-                    
-                        #if DBG_PAUSE_RESUME
-                        sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- m3\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                    }
-                    #endif // #if USB_AUTO_PAUSE
                     
                     #if DBG_USB_FLW
                     usbdist = usbrun - usbfolw;
@@ -73401,61 +73293,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
-
-                #if 0//USB_AUTO_RESUME
-                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-
-                upa = puhsinfo->ushostpause;
-                ufr = puhsinfrd->ushostpause;
-
-                ure = puhsinfo->ushostresume;
-                ufo = puhsinfrd->ushostresume;
-
-                if (((upa) || (ufr)) && ((ure) || (ufo))) {
-                
-                    #if 0
-                    if ((upa == 0) || (ufr == 0)) {
-                        sprintf_f(rs->logs, "update pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d - m0\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
-                        print_f(rs->plogs, sp, rs->logs);
-                    }
-                    #endif
-                    puhsinfo->ushostpause = 0;
-                    puhsinfrd->ushostpause = 0;
-
-                }
-                else if (ure == 2) {
-                    ix = puhsinfo->ushostresume;
-                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
-                    
-                    puhsinfo->ushostresume += 1;
-                
-                    #if DBG_PAUSE_RESUME
-                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - m0.1\n", usbdist, ure, ufo, pieRet);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
-                    
-                    //usleep(500000);
-                    //sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
-                    //print_f(rs->plogs, sp, rs->logs);
-                    
-                    if (ufo) {
-                        puhsinfrd->ushostresume += 1;
-                    }
-                    else {
-                        puhsinfrd->ushostresume = 3;
-                    }
-                }
-                
-                if ((ure > 2) && (ufo > 2)) {
-                    puhsinfo->ushostresume = 0;
-                    puhsinfrd->ushostresume = 0;
-                    puhsinfo->ushostpause = 0;
-                    puhsinfrd->ushostpause = 0;
-                    //sprintf_f(rs->logs, "RESUME reset remain: %d m\n", usbdist);
-                    //print_f(rs->plogs, sp, rs->logs);
-                }
-                #endif // #if USB_AUTO_RESUME
                 
                 if (recvsz < 0) {
                     sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
@@ -73481,23 +73318,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         print_f(rs->plogs, sp, rs->logs);
                     }
                     
-                    #if USB_RECVLEN_ZERO_HANDLE
-
-                    if (usbrun == 0) {
-                        ring_buf_prod_u(pTx, recvsz);      
-                        usbfolw = ring_buf_prod_tag(pTx, usbrun);
-
-                        #if 1 //DBG_USB_HS
-                        sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                    } else {
-                        continue;
-                    }
-                    
-                    #else
                     continue;
-                    #endif
                 }
                 else {
                     /*do nothing*/
@@ -73507,27 +73328,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "usb read %d / %d!!(0x%.2x)\n ", recvsz, len, cmdchr);
                 print_f(rs->plogs, sp, rs->logs);
                 #endif
-                
-                //sprintf_f(rs->logs, "usb read %d / %d!!\n", recvsz, len);
-                //print_f(rs->plogs, sp, rs->logs);
-                
-                //sprintf_f(rs->logs, "[HS] dump 32 - 0 \n");
-                //msync(addr, recvsz, MS_SYNC);
-                //shmem_dump(addr, 32);
 
                 tcnt ++;
-
-                /*
-                if (tcnt == 1) {
-                    clock_gettime(CLOCK_REALTIME, &utstart);
-                    //sprintf_f(rs->logs, "start ... \n");
-                    //print_f(rs->plogs, sp, rs->logs);
-                }
-                */
-                
-                #if USB_HS_SAVE_RESULT        
-                pcur += recvsz;
-                #endif
                 
                 acusz += recvsz;
 
@@ -73535,32 +73337,16 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     //clock_gettime(CLOCK_REALTIME, &utend);
                     
                     ring_buf_set_last(pTx, recvsz);
-                    //sprintf_f(rs->logs, "loop last ret: %d, the last size: %d avg: %d tot: %d cnt: %d\n", ptret, recvsz, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbtrkpage, puhsinfo->ushostbpagecnt);
-                    //print_f(rs->plogs, sp, rs->logs);
+
 
                     sprintf(rs->logs, "__USB_DEV_ EXTRA_META[%d][%s][%s]__", acusz, sp, puhsinfo->ushostname); 
                     thrimgsize += (CFLOAT)acusz;
                     ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
-                    /*
-                    thrtimecost = (CFLOAT)ret - thrtimecost;
-                    throughput = thrimgsize / thrtimecost;
-                    sprintf_f(rs->logs, "__USB_DEV_ THROUGHPUT[%.2lf][%s][%s]__", throughput, sp, puhsinfo->ushostname); 
-                    ret = dbgShowTimeStamp(rs->logs,  NULL, rs, 8, rs->logs);
-                    thrtimecost = (CFLOAT)ret;
-                    */
                     break;
                 } else {
                     chq = 'D';
                     pieRet = write(pPrx[1], &chq, 1);
                 }
-                
-                #if USB_HS_SAVE_RESULT               
-                if (acusz > bufmax) {
-                    sprintf_f(rs->logs, "save image error due to buffer size not enough!!!");
-                    print_f(rs->plogs, sp, rs->logs);
-                    break;
-                }
-                #endif
 
                 len = ring_buf_get(pTx, &addr);
                 while (len <= 0) {
@@ -73571,7 +73357,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
             }
 
-            //puhs->pushcnt = tcnt;
             if (puhs->pushcswerr > 0) {
                 puhs->pushcnt += 1;
             }
@@ -73605,36 +73390,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "Error!!! unknown chr: %c \n", chr);
                 print_f(rs->plogs, sp, rs->logs);
             }
-    
-            #if USB_HS_SAVE_RESULT
-            wrtsz = fwrite(pImage, 1, acusz, fsave);
-            #endif
-            
-            //usCost = time_diff(&utstart, &utend, 1000);
-            //throughput = acusz*8.0 / usCost*1.0;
-
-            //sprintf_f(rs->logs, "last size: %d\n", acusz);
-            //print_f(rs->plogs, sp, rs->logs);
-            
-            #if USB_HS_SAVE_RESULT
-            sync();
-            fclose(fsave);
-            free(pImage);
-            #endif
 
         }
         else if (cmdchr == 0x18) {
-
-            #if USB_HS_SAVE_RESULT
-            fsave = find_save(ptfilepath, ptfileSave);
-            if (!fsave) {
-                goto end;    
-            }
-
-            bufmax = 8*1024*1024;
-            pImage = malloc(bufmax);
-            pcur = pImage;
-            #endif
 
             recvsz = 0;
             acusz = 0;
@@ -73659,22 +73417,18 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 #endif
                 
                 #if USB_CALLBACK_LOOP 
-                recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
+                //recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
+                recvsz = simdatas[simcnt%SIM_NUM];
+                ptmetas[17] = simcnt + 1;
+                
+                usleep(10000);
                 #else
                 recvsz = usb_read(addr, usbid, len);
-                //recvsz = len;
                 #endif
 
-                #if 0
-                sprintf_f(rs->logs, "usb read 0x%.8x, flow: %d, run: %d - 0x02\n", recvsz, usbfolw, usbrun);
+                #if 1
+                sprintf_f(rs->logs, "usb read 0x%.8x, flow: %d, run: %d - 0x102\n", recvsz, usbfolw, usbrun);
                 print_f(rs->plogs, sp, rs->logs);
-                #endif
-                
-                #if 0                
-                if (tcnt) {
-                    clock_gettime(CLOCK_REALTIME, &utend);
-                    //usCost = test_time_diff(&utstart, &utend, 1000);
-                }
                 #endif 
 
                 if (recvsz & 0x10000000) {
@@ -73715,11 +73469,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     else {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-
-                        #if DBG_USB_HS
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 1\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
                     }
                     //sprintf_f(rs->logs, "last trunk size: %d \n", recvsz);
                 }
@@ -73727,19 +73476,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     if (recvsz > 0) {
                         usbrun = recvsz  & 0xfff;
                         recvsz = len;
-
-                        #if DBG_USB_HS
-                        sprintf_f(rs->logs, "recvsz: %d, usbrun: %d - 2\n", recvsz, usbrun);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
                     }
                 }
                 
                 if (recvsz > 0) {
-                    
-                    #if USB_HS_SAVE_RESULT
-                    memcpy(pcur, addr, recvsz);
-                    #endif
                     
                     if (usbrun > 0) {
                         puhsinfo->ushostbtrktot = usbrun;
@@ -73757,6 +73497,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     msync(ptm, USB_BUF_SIZE, MS_SYNC);
                     asp_mem_barrier();
+
+                    memset(ptm, 0x0, USB_BUF_SIZE);
+                    memcpy(ptm, ptmetas, 160);
                     
                     memcpy(addr, ptm, USB_BUF_SIZE);
 
@@ -73782,6 +73525,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             
                             shmem_dump(pt, recvsz-mtlen);                             
                         }
+                        #if 0 /* debug print meta */
+                        else {
+                            sprintf_f(rs->logs, "dump meta:\n");
+                            print_f(rs->plogs, sp, rs->logs);
+                        
+                            shmem_dump(pt, recvsz-mtlen);                             
+                        }
+                        #endif
                     }
 
                     buffstep += 1;
@@ -73800,195 +73551,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                 }
-
-                #if USB_AUTO_PAUSE
                 
-                //puhsinfo->ushostbtrkbuffed = puhsinfo->ushostbtrktot - puhsinfo->ushostbtrkcms;
-                usbdist = puhsinfo->ushostbmax - puhsinfo->ushostbtrkbuffed;
-                    
-                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-                
-                upa = puhsinfo->ushostpause;
-                ufr = puhsinfrd->ushostpause;
-                
-                ure = puhsinfo->ushostresume;
-                ufo = puhsinfrd->ushostresume;
-                
-                
-                if (!upa) {
-                    ix = upa;
-                    
-                    #if DBG_PAUSE_RESUME
-                    sprintf_f(rs->logs, "pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
-                    
-                    if (ufr == 1) {
-                        USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                            
-                        puhsinfo->ushostpause = 1;
-                
-                        #if DBG_PAUSE_RESUME
-                        sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 0\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                    }
-                    else if (puhsinfo->ushostbpagecnt == 0) {
-                        if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
-                            USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                            
-                            puhsinfo->ushostpause = 1;
-                
-                            #if DBG_PAUSE_RESUME
-                            sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - 1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
-                            print_f(rs->plogs, sp, rs->logs);
-                            #endif
-                        }
-                    } else {
-                        usbuffed = puhsinfo->ushostbtrkbuffed;
-                        usbavg = puhsinfo->ushostbtrkpageavg;
-                        usbdist = usbufmax - usbuffed;
-                        usbthrhld = usbavg * 2 + 50;
-                        if (usbavg) {
-                            if (usbavg > puhsinfo->ushostbthrshold) {
-                                if (usbdist < usbavg) {
-                                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                                    puhsinfo->ushostpause = 1;
-                                    #if DBG_PAUSE_RESUME
-                                    sprintf_f(rs->logs, "PAUSE remain: %d system thrshold: %d, avgpage: %d - 2.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbtrkpageavg);
-                                    print_f(rs->plogs, sp, rs->logs);
-                                    #endif
-                                }
-                            }             
-                            else if (usbdist < usbthrhld) {
-                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                                puhsinfo->ushostpause = 1;
-                                
-                                #if DBG_PAUSE_RESUME
-                                sprintf_f(rs->logs, "PAUSE remain: %d avg thrshold: %d, avgpage: %d - 2.2\n", usbdist, usbthrhld, puhsinfo->ushostbtrkpageavg);
-                                print_f(rs->plogs, sp, rs->logs);
-                                #endif
-                            }                
-                        }
-                        else {
-                            if (puhsinfo->ushostbtrktot > puhsinfo->ushostbthrshold) {
-                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                            
-                                puhsinfo->ushostpause = 1;
-                
-                                #if DBG_PAUSE_RESUME
-                                sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d - 3.1\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt);
-                                print_f(rs->plogs, sp, rs->logs);
-                                #endif
-                            }
-                            else if (usbdist < (puhsinfo->ushostbthrshold * 2)) {
-                                USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                                
-                                puhsinfo->ushostpause = 1;
-                                
-                                #if DBG_PAUSE_RESUME
-                                sprintf_f(rs->logs, "PAUSE remain: %d thrshold/2: %d - 3.2\n", usbdist, (puhsinfo->ushostbthrshold / 2));
-                                print_f(rs->plogs, sp, rs->logs);
-                                #endif
-                            }
-                        }
-                    }
-                }
-                else if (upa == 2) {
-                    USB_IOCT_LOOP_READ_PAUSE(usbid, &ix);
-                            
-                    puhsinfo->ushostpause += 1;
-                    
-                    #if DBG_PAUSE_RESUME                                        
-                    sprintf_f(rs->logs, "PAUSE remain: %d thrshold: %d, pagecnt: %d u:%d f:%d- 3\n", usbdist, puhsinfo->ushostbthrshold, puhsinfo->ushostbpagecnt, upa, ufr);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
-                }
-                #endif // #if USB_AUTO_PAUSE
-                
-                #if USB_AUTO_RESUME
-                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-
-                upa = puhsinfo->ushostpause;
-                ufr = puhsinfrd->ushostpause;
-                
-                ure = puhsinfo->ushostresume;
-                ufo = puhsinfrd->ushostresume;
-                
-                if (((upa) || (ufr)) && ((ure > 0) || (ufo > 0))) {
-
-                    #if 0
-                    if ((upa == 0) || (ufr == 0)) {
-                        sprintf_f(rs->logs, "update pause info buffed: %d avg: %d cnt: %d p:%d r:%d fp:%d fr:%d - 0\n", puhsinfo->ushostbtrkbuffed, puhsinfo->ushostbtrkpageavg, puhsinfo->ushostbpagecnt, upa, ure, ufr, ufo);
-                        print_f(rs->plogs, sp, rs->logs);
-                    }
-                    #endif
-                    
-                    //puhsinfo->ushostresume = 0;
-                    //puhsinfrd->ushostresume = 0;
-
-                }
-                else if (ure == 2) {
-                    ix = puhsinfo->ushostresume;
-                    
-                    pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
-                    while (pieRet == 0) {
-                        #if 1//DBG_PAUSE_RESUME
-                        sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d resume faied!! - 0.1 \n", usbdist, ure, ufo, pieRet);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                        pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
-                    }
-
-                    puhsinfo->ushostresume += 1;
-                
-                    #if 1//DBG_PAUSE_RESUME
-                    sprintf_f(rs->logs, "RESUME remain: %d ure:%d ufo:%d ret: %d succeed!! - 0.1\n", usbdist, ure, ufo, pieRet);
-                    print_f(rs->plogs, sp, rs->logs);
-                    #endif
-                    
-                    msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-                    ufo = puhsinfrd->ushostresume;
-                    
-                    if (ufo) {
-                        puhsinfrd->ushostresume += 1;
-                    }
-                    else {
-                        puhsinfrd->ushostresume = 3;
-                    }
-
-                }
-                else if ((ure > 2) && (!ufo)) {
-                    puhsinfo->ushostresume = 0;
-                }
-                else {
-                    if ((ure > 2) && (ufo > 2)) {
-                        puhsinfo->ushostresume = 0;
-                        puhsinfrd->ushostresume = 0;
-                        puhsinfo->ushostpause = 0;
-                        puhsinfrd->ushostpause = 0;
-                        //sprintf_f(rs->logs, "RESUME reset remain: %d \n", usbdist);
-                        //print_f(rs->plogs, sp, rs->logs);
-                    }
-                }
-
-                #if 0
-                msync(puhsinfo, sizeof(struct usbHostmem_s), MS_SYNC);
-                msync(puhsinfrd, sizeof(struct usbHostmem_s), MS_SYNC);
-
-                upa = puhsinfo->ushostpause;
-                ufr = puhsinfrd->ushostpause;
-                
-                ure = puhsinfo->ushostresume;
-                ufo = puhsinfrd->ushostresume;
-                #endif
-                
-
-                #endif // #if USB_AUTO_RESUME
                 if (recvsz < 0) {
                     sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
                     print_f(rs->plogs, sp, rs->logs);
@@ -74013,42 +73576,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         print_f(rs->plogs, sp, rs->logs);
                     }
 
-                    
-                    #if 0 /* recover if the pause didn't be resume */
-                    if (idlecnt == 0x120000) {
-                        ix = puhsinfo->ushostresume;
-                        pieRet = USB_IOCT_LOOP_READ_RESTART(usbid, &ix);
-
-                        #if 1//DBG_PAUSE_RESUME
-                        sprintf_f(rs->logs, " timeout RESUME remain: %d ure:%d ufo:%d ret: %d - 0.2\n", usbdist, ure, ufo, pieRet);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                    }
-                    #endif
-
-                    //sprintf_f(rs->logs, "usb read ret: %d \n", recvsz);
-                    #if USB_RECVLEN_ZERO_HANDLE
-                    
-                    if (usbrun == 0) {
-
-                        buffstep += 1;
-                        
-                        ring_buf_prod_u(pTx, recvsz);      
-                        usbfolw = ring_buf_prod_tag(pTx, usbrun);
-
-                        #if 1 //DBG_USB_HS
-                        sprintf_f(rs->logs, "usbfolw: %d, usbrun: %d recvsz: %d\n", usbfolw, usbrun, recvsz);
-                        print_f(rs->plogs, sp, rs->logs);
-                        #endif
-                    } else {
-                        continue;
-                    }
-                    
-                    #else
-                    
                     continue;
                     
-                    #endif
                 }
                 else {
                     /*do nothing*/
@@ -74059,22 +73588,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 sprintf_f(rs->logs, "usb read %d / %d!!(0x%.2x)\n ", recvsz, len, cmdchr);
                 print_f(rs->plogs, sp, rs->logs);
                 #endif
-                
-                //sprintf_f(rs->logs, "[HS] dump 32 - 0 \n");
-                //msync(addr, recvsz, MS_SYNC);
-                //shmem_dump(addr, 32);
 
                 tcnt ++;
 
                 if (tcnt == 1) {
                     clock_gettime(CLOCK_REALTIME, &utstart);
-                    //sprintf_f(rs->logs, "start ... \n");
-                    //print_f(rs->plogs, sp, rs->logs);
                 }
-                
-                #if USB_HS_SAVE_RESULT        
-                pcur += recvsz;
-                #endif
                 
                 acusz += recvsz;
 
@@ -74100,14 +73619,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     pieRet = write(pPrx[1], &chq, 1);
                 }
                 
-                #if USB_HS_SAVE_RESULT               
-                if (acusz > bufmax) {
-                    sprintf_f(rs->logs, "save image error due to buffer size not enough!!!");
-                    print_f(rs->plogs, sp, rs->logs);
-                    break;
-                }
-                #endif
-                
                 len = ring_buf_get(pTx, &addr);
                 while (len <= 0) {
                     sleep(1);
@@ -74117,7 +73628,6 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
             }
 
-#if 1
             switch (chr) {
             case 'd':
                 chq = 'Q';
@@ -74144,50 +73654,15 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 print_f(rs->plogs, sp, rs->logs);
                 break;
             }
-#else
-            if (chr == 'd') {
-                chq = 'Q';
-                pieRet = write(pPrx[1], &chq, 1);
-            }
-            else if (chr == 's') {
-                chq = 'Q';
-                pieRet = write(pPrx[1], &chq, 1);
-            }
-            else if (chr == 'q') {
-                chq = 'Q';
-                pieRet = write(pPrx[1], &chq, 1);
-            } 
-            else if (chr == 'c') {
-                chq = 'Q';
-                pieRet = write(pPrx[1], &chq, 1);
-            } else if (chr == 'R') {
-                chq = 'R';
-                pieRet = write(pPrx[1], &chq, 1);
-            }
-#endif
-
-            //puhs->pushcnt = tcnt;
 
             chq = 'E';
             pieRet = write(pPrx[1], &chq, 1);
-            
-            
-            #if USB_HS_SAVE_RESULT
-            wrtsz = fwrite(pImage, 1, acusz, fsave);
-            #endif
             
             usCost = time_diff(&utstart, &utend, 1000);
             throughput = acusz*8.0 / usCost*1.0;
 
             sprintf_f(rs->logs, "read size: %d, timecost: %d us, throughput: %lf Mbits \n", acusz, usCost, throughput);
             print_f(rs->plogs, sp, rs->logs);
-            
-            #if USB_HS_SAVE_RESULT
-            sync();
-            fclose(fsave);
-            free(pImage);
-            #endif
-
         }
         else if (cmdchr == 0x17) {
             sprintf_f(rs->logs, "ENT reset to rom vid: 0x%.2x pid: 0x%.2x\n", puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
@@ -76026,6 +75501,14 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             
                             shmem_dump(pt, recvsz-mtlen);                             
                         }
+                        #if 0 /* debug print meta */
+                        else {
+                            sprintf_f(rs->logs, "dump meta: \n");
+                            print_f(rs->plogs, sp, rs->logs);
+
+                            shmem_dump(pt, recvsz-mtlen);                             
+                        }
+                        #endif
                     }
 
                     buffstep += 1;
@@ -77505,6 +76988,49 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                             }
                         }
                         #endif
+
+                        #if 0 /* warm up */
+                        if (usbid01) {
+                            chq = 'r';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+
+                        if (usbid02) {
+                            chd = 'r';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+
+                        if (usbid01) {
+                            chq = 'q';
+                            pipRet = write(pipeTx[1], &chq, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+
+                        if (usbid02) {
+                            chd = 'q';
+                            pipRet = write(pipeTxd[1], &chd, 1);
+                            if (pipRet < 0) {
+                                sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                print_f(rs->plogs, "P11", rs->logs);
+                                continue;
+                            }
+                        }
+                        #endif
+                        
                         #endif //#if USB_BOOTUP_SYNC
                     }
                     #if 0
@@ -80312,6 +79838,20 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = pushost;    
                                     pinfcur = pinfushost;
 
+                                    #if 1 /* enable sim */
+                                    //cmd = 0x11;
+                                    opc = 0x10;
+                                    dat = 0x00;
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, cbw, 31);
+                                    iubsBuff[15] = cmd;
+                                    iubsBuff[16] = opc;
+                                    iubsBuff[17] = dat;
+
+                                    opc = 0x0f;
+                                    #endif
+                                    
                                     if (usbid01) {
                                         chq = 'r';
                                         pipRet = write(pipeTx[1], &chq, 1);
@@ -87147,8 +86687,8 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     //mfour_rjob_cmd cmd;
     char filename[256]={0};
     char fname[32] = "char_H%.3d.jpg";
-    char filetest[128] = "/home/root/banknote/raw/H%.3d.bmp";
-    char filetestSt[128] = "/home/root/banknote/start/H%.3d.bmp";
+    //char filetest[128] = "/home/root/banknote/raw/H%.3d.bmp";
+    char filetest[128] = "/home/root/banknote/start/H%.3d.bmp";
     int ret=0;
     FILE *f=0, *f1=0, *f2=0;
     int size=0;
