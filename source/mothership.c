@@ -184,7 +184,7 @@ typedef struct
 #define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE (1)
 #define MFOUR_SIM_MODE_BMP (0)
-#define SAMPLE_WARM_UP (1)
+#define SAMPLE_WARM_UP (0)
 
 #if GHP_EN
 #define BMP_NO_CPY (1)
@@ -56159,7 +56159,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (0)
+#define DBG_BKN_GATE (1)
 #define MAX_152_EVENT (19)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -58351,11 +58351,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 
                                     curbf->bsz |= lasflag;
 
-                                    #if 0
-                                    write(outfd[ins], indexfo, 2);
-                                    #else
-
-                                    //memcpy(exptbuff, addrs, lens);    
+                                    //sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
 
                                     len = ring_buf_get(&mrs->dataRx, &addrc);
                                     while (len <= 0) {
@@ -58416,13 +58413,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         
                                         ptinfomod = ptscaninfo;
                                     }
-                                    #endif
-
-                                    ring_buf_prod(&mrs->dataRx);
-
-                                    //sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
-                                    //print_f(mrs->plog, "fs152", mrs->log);
-
+                                    
                                     #if MFOUR_SIM_MODE
                                     //mrs_ipc_put(mrs, "s", 1, 2);
                                     if (ptinfomod->PRI_O_SEC == 0) {
@@ -58431,6 +58422,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         write(infd[16], indexfo, 2);
                                     }
                                     #else
+                                    ring_buf_prod(&mrs->dataRx);
+                                    
                                     mrs_ipc_put(mrs, "o", 1, 2);
                                     mrs_ipc_put(mrs, indexfo, 2, 2);
                                     #endif //#if MFOUR_SIM_MODE
@@ -61964,7 +61957,7 @@ static int p3(struct procRes_s *rs)
                 
                 //sprintf(rs->logs, "__WAIT_CROP_CALCU_START_2__"); 
                 //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
-                
+
                 if (chc == 0x80) {
                     mbfidx = 0;
                 } else {
@@ -71601,8 +71594,8 @@ static int p8(struct procRes_s *rs)
 #define SIM_NUM 3
 #define SIM_LATE_US (200000)
 #else
-#define SIM_NUM 30
-#define SIM_LATE_US (500000)
+#define SIM_NUM 300
+#define SIM_LATE_US (200000)
 #endif
 
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
@@ -79877,7 +79870,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = pushost;    
                                     pinfcur = pinfushost;
 
-                                    #if 0 /* enable sim */
+                                    #if 1 /* enable sim */
                                     //cmd = 0x11;
                                     opc = 0x10;
                                     dat = 0x00;
@@ -84216,8 +84209,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 #endif
 
+
+                #if SAMPLE_WARM_UP
+                sprintf_f(rs->logs, "[DV] poll status check run warn up \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                cmd = 0x12;
+                opc = 0x10;
+
+                #else
                 
-                #if 0
                 msgret[0] = 'x';
                 if ((chm == 0xff) && (chn == 0xff)) {
                     msgret[1] = 0x03;
@@ -84246,14 +84247,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     print_f(rcmd->plogs, "C11", rcmd->logs);
                 }
+                
+                cmd = 0;
                 #endif
-
-                sprintf_f(rs->logs, "[DV] poll status check run warn up \n");
-                print_f(rs->plogs, "P11", rs->logs);
-
-                cmd = 0x12;
-                opc = 0x10;
-
                 //sleep(10);
                 
                 break;
@@ -87028,7 +87024,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     char filename[256]={0};
     char fname[32] = "char_H%.3d.jpg";
     
-    #if 0//SAMPLE_WARM_UP
+    #if 1//SAMPLE_WARM_UP
     char filetest[128] = "/home/root/banknote/start/H%.3d.bmp";
     #else
     char filetest[128] = "/home/root/banknote/raw/H%.3d.bmp";
@@ -87936,7 +87932,10 @@ static int p12(struct procRes_s *rs)
                     pllfd[0].fd = pipeMfRx[0];
                     pllfd[0].events = POLLIN;
 
+                    mfcmd = 0;
+                    
                     while (1) {
+                        
                         pipRet = poll(pllfd, 1, 500);
                         if (pipRet > 0) {
                             ret = read(pllfd[0].fd, &chm, 1);
