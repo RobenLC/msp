@@ -153,7 +153,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (1600) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (2200) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -184,7 +184,7 @@ typedef struct
 #define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE (1)
 #define MFOUR_SIM_MODE_BMP (0)
-#define SAMPLE_WARM_UP (0)
+#define SAMPLE_WARM_UP (1)
 
 #if GHP_EN
 #define BMP_NO_CPY (1)
@@ -50941,7 +50941,7 @@ static int fs108(struct mainRes_s *mrs, struct modersp_s *modersp)
 static int fs109rs(struct procRes_s *rs)
 {
     int ret=0, len=0;
-    char paramFilePath[128] = "/root/scaner/scannerParam.bin";
+    char paramFilePath[128] = "/home/root/banknote/scannerParam.bin";
     FILE *f;
     struct aspConfig_s *pct=0;
 
@@ -56159,7 +56159,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (1)
+#define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -58266,11 +58266,20 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     memcpy(ptscaninfo, addrd, mlen);
 
                                     ptusbmeta = ptscaninfo;
+
+                                    #if MFOUR_SIM_MODE
+                                    ptusbmeta->PRI_O_SEC = 0;
+                                    #endif
+
                                 } else {
                                     memset(ptscaninfoduo, 0xff, sizeof(struct aspMetaDataviaUSB_s));
                                     memcpy(ptscaninfoduo, addrd, mlen);    
                                     
                                     ptusbmeta = ptscaninfoduo;
+                                    
+                                    #if MFOUR_SIM_MODE
+                                    ptusbmeta->PRI_O_SEC = 1;
+                                    #endif
                                 }
 
                                 //dbgMetaUsb(ptusbmeta);
@@ -62066,7 +62075,7 @@ static int p3(struct procRes_s *rs)
 
                         sprintf(rs->logs, "__CROP_CALCU_START(%d)__", mbfidx); 
                         tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
-                                
+
                         result = aspMemalloc(sizeof(int)*8, 3);
                         org = aspMemalloc(sizeof(int)*org_len, 3);
                         mass = aspMemalloc(sizeof(int)*mass_len, 3);
@@ -62080,7 +62089,8 @@ static int p3(struct procRes_s *rs)
                         memset(mass, 0, sizeof(int)*mass_len);
 
                         clock_gettime(CLOCK_REALTIME, &crpS);
-
+                        
+                        #if 0
                         ret = getOrg(org, addr, totsz, rs, layeTot);
                         if (ret) {
                             sprintf_f(rs->logs, "m4 getOrg ret: %d layeTot: %d\n", ret, layeTot);
@@ -62095,7 +62105,8 @@ static int p3(struct procRes_s *rs)
                         else {
                             doCalculate(result, org, org_len, mass, mass_len, rs, 3);
                         }
-
+                        #endif
+                        
                         sprintf(rs->logs, "__CROP_CALCU_END(%d)__", mbfidx); 
                         tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
                         
@@ -71592,10 +71603,10 @@ static int p8(struct procRes_s *rs)
 #define USB_POLLTIME_US (1000)
 #if SAMPLE_WARM_UP
 #define SIM_NUM 3
-#define SIM_LATE_US (200000)
+#define SIM_LATE_US (50000)
 #else
-#define SIM_NUM 300
-#define SIM_LATE_US (200000)
+#define SIM_NUM 1000
+#define SIM_LATE_US (50000)
 #endif
 
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
@@ -76545,7 +76556,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0, ringidx=0;
     #if 1 /* save meta */
     char ptfilepath[128];
-    static char ptfileSaveMeta[] = "/mnt/mmc2/usb/meta_%.3d.bin";
+    static char ptfileSaveMeta[] = "/home/root/banknote/meta_%.3d.bin";
     static char ptfileSaveWifiMeta[] = "/mnt/mmc2/usb/wmeta_%.3d.bin";
     static char ptfileSavejpg[] = "/home/root/rot_%.3d.jpg";
     FILE *fsmeta=0;
@@ -77008,7 +77019,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         }
                         #endif
 
-                        #if SAMPLE_WARM_UP /* warm up */    
+                        #if 0//SAMPLE_WARM_UP /* warm up */    
                         usbCur = puscur->pushring;
                         piptx = puscur->pushtx;
                         piprx = puscur->pushrx; 
@@ -78841,13 +78852,15 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     shmem_dump(ptrecv, recvsz);
                     #endif
                 
-                    #if 0 /* save meta */
+                    #if 1 /* save meta */
                     fsmeta = find_save(ptfilepath, ptfileSaveMeta);
                     if (fsmeta) {
                         sprintf_f(rs->logs, "[DV] find save meta [%s] succeed!!! \n", ptfilepath);
                         print_f(rs->plogs, "P11", rs->logs);
                 
                         wrtsz = fwrite(ptrecv, 1, recvsz, fsmeta);
+
+                        fflush(fsmeta);
                         sync();
                         fclose(fsmeta);
                     }
@@ -78868,6 +78881,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
                     //sprintf_f(rs->logs, "[DV]  meta release ret: %d \n", pipRet);
                     //print_f(rs->plogs, "P11", rs->logs);
+
+                    #if 1
+                    fs109rs(rs);
+                    #endif
                     
                     #if 0
                     shmem_dump(ptrecv, recvsz);
@@ -79442,9 +79459,36 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     break;
                                 }
                                 else if ((opc == 0x10) && (dat == 0x85)) {
+                                
                                     cmd = 0x12;
                                     usbentsTx = 1;
+
+                                    iubs->opinfo = opc << 8 | dat;
+                                    memcpy(iubsBuff, ptrecv, 31);
                                     
+                                    puscur = 0;
+                                    pinfcur = 0;
+
+                                    #if SCAN_BNOTE_EN // test code
+                                    if (strcmp(msgcmd, "usbbknote") != 0) {
+                                        sprintf(msgcmd, "usbbknote");
+                                        rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                                    }
+                                    #else
+                                    if (strcmp(msgcmd, "usbscan") != 0) {
+                                        sprintf(msgcmd, "usbscan");
+                                        rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                                    }
+                                    #endif
+                                    
+                                    chq = 'n';
+                                    pipRet = write(pipeTx[1], &chq, 1);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                                        print_f(rs->plogs, "P11", rs->logs);
+                                        continue;
+                                    }
+
                                     break;
                                 }
                                 else if ((opc == 0x0f) && (dat == 0x85)) {
@@ -79865,7 +79909,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                 acusz = 0;
                                 break;
                             }
-                            else if (((opc == 0x0a) || (opc == 0x0e) || (opc == 0x0f)) && (dat == 0x85)) {
+                            else if (((opc == 0x0a) || (opc == 0x0e) || (opc == 0x0f) || (opc == 0x10)) && (dat == 0x85)) {
                                 if (!puscur) {
                                     puscur = pushost;    
                                     pinfcur = pinfushost;
@@ -80975,6 +81019,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 while (lens) {
                     //sendsz = usbc_write(usbfd, addrd, lens);
                     sendsz = lens;
+                    usleep(1000);
+                    
                     if (sendsz < 0) {
                         errcnt++;
                         if ((errcnt & 0x1fff) == 0) {
@@ -81013,6 +81059,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 while (lastCylen) {
                     //sendsz = usbc_write(usbfd, addrb, lastCylen);
                     sendsz = lastCylen;
+                    usleep(1000);
+                    
                     if (sendsz < 0) {
                         errcnt++;
                         if ((errcnt & 0x1fff) == 0) {
@@ -84210,14 +84258,42 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #endif
 
 
-                #if SAMPLE_WARM_UP
+                #if 1//SAMPLE_WARM_UP
+                msgret[0] = 'x';
+                if ((chm == 0xff) && (chn == 0xff)) {
+                    msgret[1] = 0x03;
+                }
+                else {
+                    if ((chm == 0) || (chn == 0)) {
+                        msgret[1] = 0x01;
+                    } else {
+                        msgret[1] = 0x02;
+                    }
+                }
+                
+                pipRet = write(pipeTx[1], msgret, 2);                
+                if (pipRet < 0) {
+                    printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                }
+                
+                sprintf(msgcmd, "usbidle");
+
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
+                if (ret > 0) {
+                    rcmd->logs[ret] = '\n';
+
+                    sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
+                    print_f(rs->plogs, "P11", rs->logs);   
+
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
+                }
+                
+                cmd = 0;
+                #else
                 sprintf_f(rs->logs, "[DV] poll status check run warn up \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
-                cmd = 0x12;
-                opc = 0x10;
-
-                #else
+                //#else
                 
                 msgret[0] = 'x';
                 if ((chm == 0xff) && (chn == 0xff)) {
@@ -84249,6 +84325,83 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
                 
                 cmd = 0;
+
+                cmd = 0x12;
+                opc = 0x10;
+
+                iubs->opinfo = opc << 8 | dat;
+                memcpy(iubsBuff, cbw, 31);
+                iubsBuff[15] = cmd;
+                iubsBuff[16] = opc;
+                iubsBuff[17] = dat;
+                
+                puscur = pushost;    
+                pinfcur = pinfushost;
+                
+                #if SCAN_BNOTE_EN // test code
+                if (strcmp(msgcmd, "usbbknote") != 0) {
+                    sprintf(msgcmd, "usbbknote");
+                    rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                }
+                #else
+                if (strcmp(msgcmd, "usbscan") != 0) {
+                    sprintf(msgcmd, "usbscan");
+                    rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                }
+                #endif
+                
+                chq = 'n';
+                pipRet = write(pipeTx[1], &chq, 1);
+                if (pipRet < 0) {
+                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    continue;
+                }
+
+                usbCur = puscur->pushring;
+                piptx = puscur->pushtx;
+                piprx = puscur->pushrx; 
+
+                if (usbid01) {
+                    chq = 'r';
+                    pipRet = write(pipeTx[1], &chq, 1);                                
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }                                                                      
+                                                                                       
+                if (usbid02) {                                                         
+                    chd = 'r';                                                         
+                    pipRet = write(pipeTxd[1], &chd, 1);                               
+                    if (pipRet < 0) {                                                  
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }                                                                      
+                                                                                       
+                if (usbid01) {                                                         
+                    chq = 'q';                                                         
+                    pipRet = write(pipeTx[1], &chq, 1);                                
+                    if (pipRet < 0) {                                                  
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }                                                                      
+                                                                                       
+                if (usbid02) {                                                         
+                    chd = 'q';                                                         
+                    pipRet = write(pipeTxd[1], &chd, 1);                               
+                    if (pipRet < 0) {                                                  
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }  
+
                 #endif
                 //sleep(10);
                 
@@ -87024,7 +87177,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     char filename[256]={0};
     char fname[32] = "char_H%.3d.jpg";
     
-    #if 1//SAMPLE_WARM_UP
+    #if 0//SAMPLE_WARM_UP
     char filetest[128] = "/home/root/banknote/start/H%.3d.bmp";
     #else
     char filetest[128] = "/home/root/banknote/raw/H%.3d.bmp";
@@ -90218,8 +90371,9 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     colr = 24;
                     break;
                 }
-                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
-                //print_f(rs->plogs, sp, rs->logs);
+                
+                sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                print_f(rs->plogs, sp, rs->logs);
         
                 ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
         
@@ -92897,8 +93051,8 @@ int main(int argc, char *argv[])
         }
         fclose(fprm);
         /* reset the run time parameters */
-        setDefaultConf(pmrs->configTable);
-        setDefaultConfFile(pmrs->configTable);
+        //setDefaultConf(pmrs->configTable);
+        //setDefaultConfFile(pmrs->configTable);
     }
     
     if (readLen == 0) { 
