@@ -71725,8 +71725,8 @@ static int p8(struct procRes_s *rs)
 #define DBG_USB_FLW (0)
 #define USB_POLLTIME_US (1000)
 #if SAMPLE_WARM_UP
-#define SIM_NUM 3
-#define SIM_LATE_US (90000)
+#define SIM_NUM 5
+#define SIM_LATE_US (40000)
 #else
 #define SIM_NUM 400
 #define SIM_LATE_US (60000)
@@ -80062,7 +80062,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     iubsBuff[16] = opc;
                                     iubsBuff[17] = dat;
 
-                                    //opc = 0x0f;
+                                    opc = 0x0f;  // feed paper
                                     #endif
                                     
                                     if (usbid01) {
@@ -81108,7 +81108,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                             pagerst = ix + 1;
 
+                                            #if 0 /* enable sim */
                                             lrst = 1; opc = 0x0f;
+                                            #endif
                                             
                                             sprintf_f(rs->logs, "[DV] output bfs last %d. addr: 0x%.8x len: %d ret: %d, cswerr: %d, pagerst: %d - 2 lrst: %d \n", ix, (uint32_t)bfs[ix], bflens[ix], err, cswerr, pagerst, lrst);
                                             print_f(rs->plogs, "P11", rs->logs);
@@ -84410,7 +84412,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #endif
 
 
-                #if 1//SAMPLE_WARM_UP
+                #if 0//SAMPLE_WARM_UP
                 msgret[0] = 'x';
                 if ((chm == 0xff) && (chn == 0xff)) {
                     msgret[1] = 0x03;
@@ -87321,6 +87323,7 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     return 0;
 }
 
+#define MEM_SPEEDUP_READ_EN (0)
 static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max)
 {
     static char *bmpSampleaddr[2]={0};
@@ -87332,7 +87335,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     char fname[32] = "char_H%.3d.jpg";
     char *bmpsrc=0;
     
-    #if 0//SAMPLE_WARM_UP
+    #if SAMPLE_WARM_UP
     char filetest[128] = "/home/root/banknote/start/H%.3d.bmp";
     #else
     char filetest[128] = "/home/root/banknote/raw/H%.3d.bmp";
@@ -87357,8 +87360,8 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
 
     sel = midx % 2;
 
-    sprintf_f(rs->logs,"open m4 sample file midx: %d, sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
-    print_f(rs->plogs, "fIle", rs->logs);
+    //sprintf_f(rs->logs,"open m4 sample file midx: %d, sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
+    //print_f(rs->plogs, "fIle", rs->logs);
 
 
     sprintf(filename, filetest, imgidx);
@@ -87439,9 +87442,13 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     }
     
     fclose(f);
-
+    
+    #if MEM_SPEEDUP_READ_EN
     bmpSampleaddr[sel] = malloc(size);
     memcpy(bmpSampleaddr[sel], img_param->mfourData, size);
+    #else
+    bmpSampleaddr[sel] = 0;
+    #endif
     
     }
     else {
@@ -88912,7 +88919,7 @@ static int p12(struct procRes_s *rs)
 #define IMG_QUEUE_FIX_FIR (0)
 #define IMG_QUEUE_FIX_SEC (1)
 
-#define LOG_JPGH_EN (1)
+#define LOG_JPGH_EN (0)
 #if GHP_EN
 #define GHP_EN_JPGH (1)
 #else
