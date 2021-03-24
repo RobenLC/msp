@@ -154,6 +154,7 @@ typedef struct
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
 #define RING_BUFF_NUM_USB   (2200) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USBLP   (2200) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
 #define TABLE_SLOT_SIZE 4
@@ -56160,7 +56161,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (1)
+#define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -56204,8 +56205,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     uint32_t *add32d, *add32s;
     int lens=-1, szup=0, szdn=0, lastlen=0, ret=0, lasflag=0, val=0, csws=0, mlen=0, cswd=0, dlen=0, len=0;
     int wfileid=0, acusz=0, maxsz=0, fileidcnt=0;
-    int totsz[MAX_152_EVENT];
-    int cycCnt[MAX_152_EVENT];
+    int totsz[MAX_152_EVENT]={0};
+    int cycCnt[MAX_152_EVENT]={0};
     int idxInit=0;
     int memsz=0, pageidx=0, trunkidx=0, memallocsz=0;
     int mindex=0, scnt=0, smax=0;
@@ -56221,8 +56222,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     struct aspMetaDataviaUSB_s *ptinfomod=0;
     int ix=0, iv=0;
     char *exptbuff=0;
-    int bidx=0, mfidx=0, mstatus=0;
-
+    int bidx=0, mfidx=0, mstatus=0, waitidx=0;
+    char magicaspc[8];
+    
     ptlatcmd = waitIdxs;
     //exptbuff = aspMemalloc(32768, 10);
     
@@ -57036,7 +57038,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
 
                             ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
-                            sprintf_f(mrs->log, "[GW] free buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            sprintf_f(mrs->log, "[GW] free buff %d get status: 0x%.4x ret: %d (%d:%d)\n", mfidx, mstatus, ret, ptlatcmd[15], ptlatcmd[16]);
                             print_f(mrs->plog, "fs152", mrs->log);
                             
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[mfidx]);
@@ -57091,7 +57093,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                         //print_f(mrs->plog, "fs152", mrs->log);
 
                         if (latcmd[0] == '1') {
-                            sprintf_f(mrs->log, "[GW] m4 block till flow stop skip input ch: (0x%.2x) %c \n", pllcmd[ins]);
+                            sprintf_f(mrs->log, "[GW] m4 block till flow stop skip input ch: (0x%.2x) \n", pllcmd[ins]);
                             print_f(mrs->plog, "fs152", mrs->log);
                             if (pllcmd[ins] == '1') {
                                 break;
@@ -57441,9 +57443,16 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 sprintf_f(mrs->log, "[GW] pll%d get midx: %d (%d:%d)\n", ins, mindex, ptlatcmd[15], ptlatcmd[16]);
                                 print_f(mrs->plog, "fs152", mrs->log);
                                 
-                                if (((ptlatcmd[15] == 0) && (ptlatcmd[16] == 0)) || (ptlatcmd[ins])) {
+                                if ((ptlatcmd[15] == 0) && (ptlatcmd[16] == 0)) {
                                     ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
-                                    sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d \n", bidx, ret);
+                                    sprintf_f(mrs->log, "[GW] get BMP decode buff id: %d ret: %d to imgidx: %d\n", bidx, ret, mindex);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+
+                                    waitidx = 1;
+                                }
+                                else if (ptlatcmd[ins]) {
+                                    ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
+                                    sprintf_f(mrs->log, "[GW] lookback get BMP decode buff id: %d ret: %d to imgidx: %d waitidx: %d id: %d\n", bidx, ret, mindex, ptlatcmd[ins], ins);
                                     print_f(mrs->plog, "fs152", mrs->log);
                                 }
                                 else {
@@ -57457,7 +57466,12 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     bidx = -1;
 
                                     //latcmd[ins] = 0xff;
-                                    ptlatcmd[ins] = mindex;
+                                    //ptlatcmd[ins] = mindex;
+                                    if (ptlatcmd[ins] == 0) {
+                                        ptlatcmd[ins] = waitidx;
+                                        waitidx ++;
+                                    }
+
                                     //pllcmd[ins] = 0xff;
                                     
                                     //sprintf_f(mrs->log, "[GW] dump buff info(%d): \n", sizeof(struct bitmapDecodeMfour_s) * 4);
@@ -57534,7 +57548,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     midxfo[0] = ((pubffo->ubindex >> 5) & 0x3f) | 0x80;
                                     midxfo[1] = (pubffo->ubindex & 0x1f) | 0x40;
                                     prisec = pubffo->ubindex & 0x400;
+
+                                    //sprintf_f(mrs->log, "[GW] metasize: %d, lasttsize: %d, ubcylcnt: %d, cycCnt: %d\n", pubffo->ubmetasize, pubffo->ublastsize, pubffo->ubcylcnt, cycCnt[ins]);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
                                     
+
                                     if ((pubffo->ubmetasize) && (pubffo->ublastsize)) {
                                         smax = pubffo->ubcylcnt - cycCnt[ins] + 2;
                                         #if 0
@@ -57549,6 +57567,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     } else {
                                         smax = CYCLE_LEN;
                                     }
+
+                                    //sprintf_f(mrs->log, "[GW] smax: %d \n", smax);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
 
                                     scnt = 0;
                                     while (scnt < smax) {
@@ -57651,9 +57672,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             free(pubffo);
                                             
                                             pubffo = 0;
-                                            
-                                            //sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
-                                            //print_f(mrs->plog, "fs152", mrs->log);
+
+                                            #if DBG_BKN_GATE
+                                            sprintf_f(mrs->log, "[GW] the last trunk reach, set outbf == 0, pubffh: 0x%.8x \n", (uint32_t)pubffh);
+                                            print_f(mrs->plog, "fs152", mrs->log);
+                                            #endif
                                             
                                             scnt = scnt + 1;
                                             cycCnt[ins] = 0;
@@ -57675,6 +57698,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         cycCnt[ins] = cycCnt[ins] + 1;
 
                                     }
+
+                                    //sprintf_f(mrs->log, "[GW] tmpbf: 0x%.8x \n", (uint32_t)tmpbf);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
                                     
                                     if (tmpbf) {
                                         headbf = pubffo->ubbufh;
@@ -57682,8 +57708,10 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                             if  (headbf != outbf) {
                                                 tmpbf = headbf;
                                                 headbf = tmpbf->bn;
-                                                //sprintf_f(mrs->log, "[GW] free used buf addr: 0x%.8x \n", tmpbf);
+
+                                                //sprintf_f(mrs->log, "[GW] free used buf addr: 0x%.8x \n", (uint32_t)tmpbf);
                                                 //print_f(mrs->plog, "fs152", mrs->log);
+                                                
                                                 free(tmpbf->bpt);
                                                 free(tmpbf);
                                             } else {
@@ -57692,6 +57720,9 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         }
                                         pubffo->ubbufh = headbf;
                                     }
+
+                                    //sprintf_f(mrs->log, "[GW] check pllcmd[ins]: 0x%x \n", pllcmd[ins]);
+                                    //print_f(mrs->plog, "fs152", mrs->log);
 
                                     if (pllcmd[ins] == 0x7f) {
                                         minfo[0] = 0x7f;
@@ -58358,6 +58389,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     #endif
                                 }
 
+                                msync(ptusbmeta, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+
                                 //dbgMetaUsb(ptusbmeta);
 
                             }
@@ -58378,6 +58411,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 if (ins == 1) {
                                     //sprintf_f(mrs->log, "get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
                                     //print_f(mrs->plog, "fs152", mrs->log);
+                                    ptusbmeta = ptscaninfo;
 
                                     ret = aspMetafs145GetlenviaUsb(mrs);
                                     if (ret >= 0) {
@@ -58396,6 +58430,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 else {          
                                     //sprintf_f(mrs->log, "duo get usb scaninfo lastlen: %d infolen: %d\n", pubffcd[ins]->ublastsize, pubffcd[ins]->ubmetasize); 
                                     //print_f(mrs->plog, "fs152", mrs->log);
+                                    ptusbmeta = ptscaninfoduo;
                                     
                                     ret = aspMetafs145GetlenviaUsbDuo(mrs);
                                     if (ret >= 0) {                                    
@@ -58411,10 +58446,16 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         //shmem_dump((char *)pubffcd[ins]->ubinfoaddr, sizeof(struct aspMetaDataviaUSB_s));
                                     }
                                 }
+
+                                msync(ptusbmeta, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
+                                
+                                memset(magicaspc, 0, 8);
+                                memcpy(magicaspc, ptusbmeta->ASP_MAGIC_ASPC, 4);
                                 
                                 #if DBG_BKN_GATE
-                                sprintf_f(mrs->log, "[GW] get image length: %d max: %d [%s] PRI_O_SEC: %d \n", dlen, maxsz, ptusbmeta->ASP_MAGIC_ASPC, ptusbmeta->PRI_O_SEC);
+                                sprintf_f(mrs->log, "[GW] get image length: %d max: %d [%s] PRI_O_SEC: %d \n", dlen, maxsz, magicaspc, ptusbmeta->PRI_O_SEC);
                                 print_f(mrs->plog, "fs152", mrs->log);
+                                //dbgMetaUsb(ptusbmeta);
                                 #endif
                                 
                                 if ((((dlen > 0) && (dlen > maxsz)) || (dlen == 0)) && 
@@ -58513,8 +58554,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     mrs_ipc_put(mrs, indexfo, 2, 2);
                                     #endif //#if MFOUR_SIM_MODE
                                     
-                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x - end of transmission \n", 
-                                                                  ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex);
+                                    sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x (%d) - end of transmission \n", 
+                                                                  ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex, pubffcd[ins]->ubindex & 0x3ff);
                                     print_f(mrs->plog, "fs152", mrs->log);       
 
                                     //sprintf(mrs->log, "__END__TRANS__");
@@ -71683,12 +71724,12 @@ static int p8(struct procRes_s *rs)
 #define DBG_USB_HS (0)
 #define DBG_USB_FLW (0)
 #define USB_POLLTIME_US (1000)
-#if 0//SAMPLE_WARM_UP
+#if SAMPLE_WARM_UP
 #define SIM_NUM 3
 #define SIM_LATE_US (90000)
 #else
-#define SIM_NUM 100
-#define SIM_LATE_US (100000)
+#define SIM_NUM 400
+#define SIM_LATE_US (60000)
 #endif
 
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
@@ -76604,7 +76645,7 @@ static int p10(struct procRes_s *rs)
 }
 
 #define LOG_FLASH  (0)
-#define LOG_P11_EN (1)
+#define LOG_P11_EN (0)
 #define DBG_27_EPOL (0)
 #define DBG_27_DV (0)
 #define DBG_USB_TIME_MEASURE (0)
@@ -76636,7 +76677,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct pollfd ptfdc[2];
     
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0, ringidx=0;
-    #if 1 /* save meta */
+    #if 0 /* save meta */
     char ptfilepath[128];
     static char ptfileSaveMeta[] = "/home/root/banknote/meta_%.3d.bin";
     static char ptfileSaveWifiMeta[] = "/mnt/mmc2/usb/wmeta_%.3d.bin";
@@ -78934,7 +78975,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     shmem_dump(ptrecv, recvsz);
                     #endif
                 
-                    #if 1 /* save meta */
+                    #if 0 /* save meta */
                     fsmeta = find_save(ptfilepath, ptfileSaveMeta);
                     if (fsmeta) {
                         sprintf_f(rs->logs, "[DV] find save meta [%s] succeed!!! \n", ptfilepath);
@@ -81057,7 +81098,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
 
                                         
-                                        if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
+                                        //if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
+                                        if (cswerr) { // the last page
                                             pbf = bfs[ix] + bflens[ix];
                     
                                             memcpy(pbf, bfmt, mtlen);
@@ -82022,7 +82064,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puimTmp = puimCnTH;
                                     while(puimTmp) {
                                     
-                                        sprintf_f(rs->logs, "[DV] %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                                        sprintf_f(rs->logs, "[DV] list %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         
                                         puimTmp = puimTmp->uimNxt;
@@ -82481,7 +82523,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puimTmp = puimCnTH;
                                     while(puimTmp) {
                                     
-                                        #if LOG_P11_EN
+                                        #if 0//LOG_P11_EN
                                         sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
                                         print_f(rs->plogs, "P11", rs->logs);
                                         #endif
@@ -87315,7 +87357,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
 
     sel = midx % 2;
 
-    sprintf_f(rs->logs,"open m4 sample file midx: %d, sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", midx, sel, bmpSampleaddr[0], bmpsamplesize[0], bmpSampleaddr[1], bmpsamplesize[1]);
+    sprintf_f(rs->logs,"open m4 sample file midx: %d, sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
     print_f(rs->plogs, "fIle", rs->logs);
 
 
@@ -87417,7 +87459,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
 
         memcpy(img_param->mfourData, bmpsrc, size);
 
-        sprintf_f(rs->logs,"sample src copy done addr: 0x%.8x size: %d sel: %d(%d)\n", bmpsrc, size, sel, imgidx);
+        sprintf_f(rs->logs,"sample src copy done addr: 0x%.8x size: %d sel: %d(%d)\n", (uint32_t)bmpsrc, size, sel, imgidx);
         print_f(rs->plogs, "fIle", rs->logs);
         
     }
@@ -88380,6 +88422,7 @@ static int p12(struct procRes_s *rs)
                             break;
                         }
                     }
+                    
                 }
                 else {
                     sprintf_f(rs->logs, "bypass m4 image!!! ret: %d, cswerr: 0x%.2x return ch: %c \n", ret, mfbstat, ch);
@@ -88865,6 +88908,10 @@ static int p12(struct procRes_s *rs)
     return 0;
 }
 
+#define POLL_DELAY (500)
+#define IMG_QUEUE_FIX_FIR (0)
+#define IMG_QUEUE_FIX_SEC (1)
+
 #define LOG_JPGH_EN (1)
 #if GHP_EN
 #define GHP_EN_JPGH (1)
@@ -89031,11 +89078,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     idlet = time_diff(&tidleS, &tidleE, 1000000);
         
                     #if LOG_JPGH_EN
-                    sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x rx: %d, 0: %d \n", idlet, (puimGet==0)?0:(uint32_t)puimGet->uimIdex, (puimCnTH==0)?0:(uint32_t)puimCnTH->uimIdex, piprx[0], ptfdc[0].fd);
+                    sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x chr: %d, 0x%.4x \n", idlet, (puimGet==0)?0:(uint32_t)puimGet->uimIdex, (puimCnTH==0)?0:(uint32_t)puimCnTH->uimIdex, chr, chq);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                     
-                    pipRet = poll(ptfdc, 1, 500);
+                    pipRet = poll(ptfdc, 1, POLL_DELAY);
                     if (pipRet <= 0) {
                         clock_gettime(CLOCK_REALTIME, &tidleE);
                         idlet = time_diff(&tidleS, &tidleE, 1000000);
@@ -90004,7 +90051,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             puimTmp = puimCnTH;
                             while(puimTmp) {
                             
-                                #if LOG_JPGH_EN
+                                #if 0//LOG_JPGH_EN
                                 sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
                                 print_f(rs->plogs, sp, rs->logs);
                                 #endif
@@ -90048,8 +90095,73 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 }
                             }
                             #endif
-        
+                            
                             chr = 0;
+                            #if IMG_QUEUE_FIX_FIR
+                            if (puimGet) {
+                                if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                    chr = puimGet->uimIdex & 0x3ff;
+                                    mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                    mindexfo[1] = (chr & 0x1f) | 0x40;
+                                    
+                                    pipRet = write(piptx[1], mindexfo, 2);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        continue;
+                                    }
+                                }
+                            }
+                            else {
+        
+                                ix = 0;
+                                puimTmp = puimCnTH;
+                                puimUse = puimCnTH;
+                                while (puimTmp) {
+                                    if ((puimTmp->uimIdex & 0x3ff) > (puimUse->uimIdex & 0x3ff)) {
+                                        if (puimTmp->uimCount > 0) {
+                                            puimUse = puimTmp;
+                                        }
+                                    }
+                                    ix++;
+                                    puimTmp = puimTmp->uimNxt;
+                                }
+        
+                                if (ix > 0) {
+                                    puimGet = puimUse;
+                                } 
+                                
+                                if (puimGet) {
+                                    sprintf_f(rs->logs, "[DV] end get new puim index: 0x%.2x %d:%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                    print_f(rs->plogs, sp, rs->logs);
+                                
+                                    if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                        chr = puimGet->uimIdex & 0x3ff;
+        
+                                        mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                        mindexfo[1] = (chr & 0x1f) | 0x40;
+        
+                                        pipRet = write(piptx[1], mindexfo, 2);
+                                        if (pipRet < 0) {
+                                            sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                            print_f(rs->plogs, sp, rs->logs);
+                                            continue;
+                                        }
+        
+                                        sprintf_f(rs->logs, "[DV] end new puimGet send req 0x%.8x \n", puimGet->uimIdex);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                    } else {
+                                        sprintf_f(rs->logs, "\n[DV] %d:%d end wait for new data at begin \n", puimGet->uimGetCnt, puimGet->uimCount);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        chr = 0;
+                                    }
+                                }
+                                else {
+                                    sprintf_f(rs->logs, "[DV] end wait for more data \n");
+                                    print_f(rs->plogs, sp, rs->logs);
+                                }
+                            }
+                            #endif
                             
                             break;
                         } 
@@ -90084,7 +90196,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                         continue;
                                     }
                                 }
-                            } else {
+                            }
+                            else {
                                 if ((puimCnTH) && (!puimGet)) {
                                     ix=0;
                                     cindex = 0;
@@ -90400,7 +90513,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
         
                         pshfmeta = addrd + (lens - shfmeta);
         
-                        #if LOG_JPGH_EN
+                        #if 0//LOG_JPGH_EN
                         shmem_dump(pshfmeta, shfmeta);
                         #endif
 
@@ -90841,11 +90954,14 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             }
 
             #if MFOUR_SIM_MODE
+            //mfourinfo[0] = 's';
+            
             if (cswerr) {
                 mfourinfo[0] = 'd';
             } else {
                 mfourinfo[0] = 's';
             }
+            
             #else
             mfourinfo[0] = 'd';
             #endif
@@ -90886,6 +91002,96 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             che = 0;
             maxCylcnt = cntTx;
             cntTx = 0;
+
+            #if IMG_QUEUE_FIX_SEC
+                            if ((!chr) && (puimGet)) {
+                                if (puimGet->uimGetCnt < puimGet->uimCount) {
+                                    chr = puimGet->uimIdex & 0x3ff;
+                                    mindexfo[0] = ((chr >> 5) & 0x3f) | 0xc0;
+                                    mindexfo[1] = (chr & 0x1f) | 0x40;
+
+                                    if ((puimGet->uimIdex & 0x400) == 0) {
+                                        #if 1//LOG_JPGH_EN
+                                        sprintf_f(rs->logs, "[DV] end checkbfrequire primary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        #endif
+                                    } else {
+                                        #if 1//LOG_JPGH_EN
+                                        sprintf_f(rs->logs, "[DV] end checkbfrequire secondary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        #endif
+                                    }
+                                    
+                                    pipRet = write(piptx[1], mindexfo, 2);
+                                    if (pipRet < 0) {
+                                        sprintf_f(rs->logs, "[DV]  pipe(%d) put chr: %d ret: %d \n", piptx[1], chr, pipRet);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        continue;
+                                    }
+                                }
+                            }
+                            else {
+                                if ((puimCnTH) && (!puimGet)) {
+                                    ix=0;
+                                    cindex = 0;
+                                    puimNxt = 0;
+                                    puimTmp = puimCnTH;
+                                    while (puimTmp) {
+                                        puimUse = puimTmp;
+                                    
+                                        if (cindex == 0) {
+                                            cindex = puimUse->uimIdex & 0x3ff;
+                                            cindxseq = puimUse->uimSeqnum;
+                                            puimNxt = puimUse;
+                                        } else {
+                                            if ((puimUse->uimIdex & 0x3ff) < cindex) {
+                                                if (puimUse->uimSeqnum < cindxseq) {
+                                                    cindex = puimUse->uimIdex & 0x3ff;
+                                                    cindxseq = puimUse->uimSeqnum;
+                                                    puimNxt = puimUse;
+                                                }
+                                            }
+                                        }
+        
+                                        #if LOG_JPGH_EN
+                                        sprintf_f(rs->logs, "[DV] end  idle page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        #endif
+        
+                                        puimTmp = puimUse->uimNxt;
+                                        ix++;
+                                    }
+        
+                                    if (puimNxt) {
+        
+                                        puimGet = puimNxt;
+        
+                                        #if LOG_JPGH_EN
+                                        sprintf_f(rs->logs, "[DV] end  idle get puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        #endif
+        
+                                        if ((puimGet->uimIdex & 0x400) == 0) {
+                                            #if LOG_JPGH_EN
+                                            sprintf_f(rs->logs, "[DV] end idle primary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                            print_f(rs->plogs, sp, rs->logs);
+                                            #endif
+                                        } else {
+                                            #if LOG_JPGH_EN
+                                            sprintf_f(rs->logs, "[DV] end idle secondary 0x80 0x%.8x \n", puimGet->uimIdex);
+                                            print_f(rs->plogs, sp, rs->logs);
+                                            #endif
+                                        }
+                                    }
+                                    else {
+                                        #if LOG_JPGH_EN
+                                        sprintf_f(rs->logs, "[DV] end  idle get puimGet is null \n");
+                                        print_f(rs->plogs, sp, rs->logs);
+                                        #endif
+                                    }
+                                }
+                            }
+             #endif
             
         }
     }
@@ -92058,8 +92264,8 @@ static int p16(struct procRes_s *rs)
                             
                             break;
                         case 'e':
-                            sprintf_f(rs->logs, "complete \n");
-                            print_f(rs->plogs, "P16", rs->logs);
+                            //sprintf_f(rs->logs, "complete \n");
+                            //print_f(rs->plogs, "P16", rs->logs);
                             break;
                         default:
                             sprintf_f(rs->logs, "Error m4tx get[0x%.2x] unknown command !!!\n", mfcmd);
