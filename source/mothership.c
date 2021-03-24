@@ -180,12 +180,13 @@ typedef struct
 #define AP_AUTO (0)
 #define AP_CLR_STATUS (0)
 
-#define PIC_ALL_SEND (0)
+#define PIC_ALL_SEND (1)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (0)
-#define MFOUR_SIM_MODE (1)
+#define MFOUR_BMP_SEND_BACK (1)
+#define MFOUR_SIM_MODE (0)
 #define MFOUR_SIM_MODE_BMP (0)
-#define SAMPLE_WARM_UP (1)
+#define SAMPLE_WARM_UP (0)
+#define AUTO_RUN_SIM (0)
 
 #if GHP_EN
 #define BMP_NO_CPY (1)
@@ -56161,7 +56162,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (0)
+#define DBG_BKN_GATE (1)
 #define MAX_152_EVENT (19)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -71724,12 +71725,15 @@ static int p8(struct procRes_s *rs)
 #define DBG_USB_HS (0)
 #define DBG_USB_FLW (0)
 #define USB_POLLTIME_US (1000)
+
 #if SAMPLE_WARM_UP
-#define SIM_NUM 5
-#define SIM_LATE_US (40000)
-#else
-#define SIM_NUM 400
-#define SIM_LATE_US (60000)
+#define SIM_NUM_WARM  5
+#define SIM_LATE_US_W (40000)
+#endif
+
+#if AUTO_RUN_SIM
+#define SIM_NUM_SIM  100
+#define SIM_LATE_US_S (60000)
 #endif
 
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
@@ -71763,8 +71767,8 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                              ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00 ,0x00}; 
     uint32_t simdatas[2] = {0x000800a0, 0x000800a0};
     uint32_t simextra[2] = {0x08080004, 0x08280004};
-    char *simitem=0;
-    int simcnt=0;
+    char *runitem=0, *warmitem=0, *simitem=0;
+    int simcnt=0, simax=0, simdelay=0;
     char CBW[32] = {0x55, 0x53, 0x42, 0x43, 0x20, 0x14, 0x20, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
                               0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     char *pkcbw=0;
@@ -71777,12 +71781,12 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     char ptfilepath[128];
     #endif
     
-    char cmdMtx[28][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
+    char cmdMtx[30][2] = {{'m', 0x01},{'d', 0x02},{'a', 0x03},{'s', 0x02},{'p', 0x03},
     					    {'q', 0x02},{'r', 0x04},{'g', 0x05},{'e', 0x06},{'f', 0x07},
     					    {'b', 0x08},{'h', 0x07}, {'c', 0x02}, {'k', 0x04}, {'o', 0x07},
     					    {'i', 0x09}, {'w', 0x10}, {'y', 0x11}, {'z', 0x12}, {'t', 0x13},
     					    {'v', 0x14}, {'j', 0x15}, {'u', 0x16}, {'0', 0x17}, {'1', 0x18},
-    					    {'2', 0x19}, {'3', 0x20}, {'4', 0x21}}; /* j l n */
+    					    {'2', 0x19}, {'3', 0x20}, {'4', 0x21}, {'5', 0x18}, {'6', 0x19}}; /* j l n */
     uint8_t cmdchr=0;
     struct shmem_s *pTx=0;
     char *pMta=0;
@@ -71830,9 +71834,17 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     sprintf_f(rs->logs, "enter usbhostd \n");
     print_f(rs->plogs, sp, rs->logs);
 
-    simitem = malloc(SIM_NUM);
-    memset(simitem, 0x00, SIM_NUM);
-    simitem[SIM_NUM-1] = 0x01;
+    #if SAMPLE_WARM_UP
+    warmitem = malloc(SIM_NUM_WARM);
+    memset(warmitem, 0x00, SIM_NUM_WARM);
+    warmitem[SIM_NUM_WARM-1] = 0x01;
+    #endif
+
+    #if AUTO_RUN_SIM
+    simitem = malloc(SIM_NUM_SIM);
+    memset(simitem, 0x00, SIM_NUM_SIM);
+    simitem[SIM_NUM_SIM-1] = 0x01;
+    #endif
 
     ptmetas = malloc(256);
     memset(ptmetas, 0x0, 256);
@@ -72634,9 +72646,24 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         case 'q':
             cmdchr = cmdMtx[5][1];
 
+            #if SAMPLE_WARM_UP
             if (opc == 0x10) {
                 cmdchr = cmdMtx[24][1];
+
+                runitem = warmitem;
+                simax = SIM_NUM_WARM;
+                simdelay = SIM_LATE_US_W;
             }
+            #endif
+            #if AUTO_RUN_SIM
+            else if (opc == 0x11) {
+                cmdchr = cmdMtx[28][1];
+
+                runitem = simitem;
+                simax = SIM_NUM_SIM;
+                simdelay = SIM_LATE_US_S;
+            }
+            #endif
             break;
         case 'r':
             //opc = OP_Multi_DUPLEX;
@@ -72650,9 +72677,10 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             
             cmdchr = cmdMtx[6][1];
 
-            if (opc == 0x10) {
+            if ((opc == 0x10) || (opc == 0x11)) {
                 cmdchr = cmdMtx[26][1];
             }
+
             break;
         /* stop loop procedure */
         case 'g':
@@ -72666,6 +72694,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             if (opc == 0x10) {
                 cmdchr = cmdMtx[25][1];
+            }
+            else if (opc == 0x11) {
+                cmdchr = cmdMtx[29][1];
             }
             break;
         /* stop loop by host */
@@ -73298,7 +73329,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 #if USB_CALLBACK_LOOP 
                 //recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
-                ix = simitem[simcnt%SIM_NUM];
+                ix = runitem[simcnt%simax];
                 recvsz = simextra[ix%2];
                 simcnt ++;
                 //usleep(10000);
@@ -73560,11 +73591,11 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 #if USB_CALLBACK_LOOP 
                 //recvsz = USB_IOCT_LOOP_CONTI_READ(usbid, &usbfolw);
-                ix = simitem[simcnt%SIM_NUM];
+                ix = runitem[simcnt%simax];
                 recvsz = simdatas[ix%2];
                 ptmetas[17] = simcnt + 1;
                 
-                usleep(SIM_LATE_US);
+                usleep(simdelay);
                 #else
                 recvsz = usb_read(addr, usbid, len);
                 #endif
@@ -76597,7 +76628,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     return 0;
 }
 
-#define LOG_P9_EN (0)
+#define LOG_P9_EN (1)
 static int p9(struct procRes_s *rs)
 {
     int ret=0;
@@ -76622,7 +76653,7 @@ static int p9(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P10_EN (0)
+#define LOG_P10_EN (1)
 static int p10(struct procRes_s *rs)
 {
     int ret=0;
@@ -80051,9 +80082,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     puscur = pushost;    
                                     pinfcur = pinfushost;
 
-                                    #if 1 /* enable sim */
+                                    #if AUTO_RUN_SIM /* enable sim */
                                     //cmd = 0x11;
-                                    opc = 0x10;
+                                    opc = 0x11;
                                     dat = 0x00;
 
                                     iubs->opinfo = opc << 8 | dat;
@@ -80062,7 +80093,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     iubsBuff[16] = opc;
                                     iubsBuff[17] = dat;
 
-                                    opc = 0x0f;  // feed paper
+                                    //opc = 0x0f;  // feed paper
                                     #endif
                                     
                                     if (usbid01) {
@@ -80971,8 +81002,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             #endif
             
             #if SCAN_BNOTE_EN // test code
-            if ((cmd == 0x12) && (opc == 0x10)) { /* usbentsTx == 1*/
-                while ((addrd == 0) && (opc == 0x10)) {
+            if ((cmd == 0x12) && ((opc == 0x10) || (opc == 0x11))) { /* usbentsTx == 1*/
+                while ((addrd == 0) && ((opc == 0x10) || (opc == 0x11))) {
                     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
                         if (bflens[ix]) {
                             addrd = bfs[ix];
@@ -81108,9 +81139,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                             pagerst = ix + 1;
 
-                                            #if 0 /* enable sim */
-                                            lrst = 1; opc = 0x0f;
-                                            #endif
+                                            if (opc == 0x11) {
+                                                lrst = 1; 
+                                                opc = 0x0f;
+                                            }
                                             
                                             sprintf_f(rs->logs, "[DV] output bfs last %d. addr: 0x%.8x len: %d ret: %d, cswerr: %d, pagerst: %d - 2 lrst: %d \n", ix, (uint32_t)bfs[ix], bflens[ix], err, cswerr, pagerst, lrst);
                                             print_f(rs->plogs, "P11", rs->logs);
@@ -81283,7 +81315,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 }
 
                 continue;
-            } else if ((cmd == 0x12) && (opc == 0x0f)) { /* usbentsTx == 1*/
+            }
+            else if ((cmd == 0x12) && (opc == 0x0f)) { /* usbentsTx == 1*/
                 //addrd = 0;
                 while (addrd == 0) {
                     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
@@ -84412,38 +84445,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 #endif
 
 
-                #if 0//SAMPLE_WARM_UP
-                msgret[0] = 'x';
-                if ((chm == 0xff) && (chn == 0xff)) {
-                    msgret[1] = 0x03;
-                }
-                else {
-                    if ((chm == 0) || (chn == 0)) {
-                        msgret[1] = 0x01;
-                    } else {
-                        msgret[1] = 0x02;
-                    }
-                }
-                
-                pipRet = write(pipeTx[1], msgret, 2);                
-                if (pipRet < 0) {
-                    printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
-                }
-                
-                sprintf(msgcmd, "usbidle");
-
-                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
-                if (ret > 0) {
-                    rcmd->logs[ret] = '\n';
-
-                    sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
-                    print_f(rs->plogs, "P11", rs->logs);   
-
-                    print_f(rcmd->plogs, "C11", rcmd->logs);
-                }
-                
-                cmd = 0;
-                #else
+                #if SAMPLE_WARM_UP
                 sprintf_f(rs->logs, "[DV] poll status check run warn up \n");
                 print_f(rs->plogs, "P11", rs->logs);
 
@@ -84555,7 +84557,37 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         continue;                                                      
                     }                                                                  
                 }  
+                #else
+                msgret[0] = 'x';
+                if ((chm == 0xff) && (chn == 0xff)) {
+                    msgret[1] = 0x03;
+                }
+                else {
+                    if ((chm == 0) || (chn == 0)) {
+                        msgret[1] = 0x01;
+                    } else {
+                        msgret[1] = 0x02;
+                    }
+                }
+                
+                pipRet = write(pipeTx[1], msgret, 2);                
+                if (pipRet < 0) {
+                    printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                }
+                
+                sprintf(msgcmd, "usbidle");
 
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
+                if (ret > 0) {
+                    rcmd->logs[ret] = '\n';
+
+                    sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
+                    print_f(rs->plogs, "P11", rs->logs);   
+
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
+                }
+                
+                cmd = 0;
                 #endif
                 //sleep(10);
                 
