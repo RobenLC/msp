@@ -140,7 +140,7 @@ typedef struct
 }   t_ImageParam;  
 #endif
 
-#define LOG_ALL_DISABLE (0)
+#define LOG_ALL_DISABLE (1)
 
 #define ONLY_ONE_USB (0)
 #if DISABLE_USB
@@ -180,13 +180,18 @@ typedef struct
 #define AP_AUTO (0)
 #define AP_CLR_STATUS (0)
 
-#define PIC_ALL_SEND (1)
+#define PIC_ALL_SEND (0)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (1)
-#define MFOUR_SIM_MODE (0)
+#define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE_BMP (0)
-#define SAMPLE_WARM_UP (0)
-#define AUTO_RUN_SIM (0)
+
+#define SAMPLE_WARM_UP (1)
+#define AUTO_RUN_SIM (1)
+#if SAMPLE_WARM_UP || AUTO_RUN_SIM
+#define MFOUR_SIM_MODE (1)
+#else
+#define MFOUR_SIM_MODE (0)
+#endif
 
 #if GHP_EN
 #define BMP_NO_CPY (1)
@@ -56162,7 +56167,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (1)
+#define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -56190,6 +56195,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     int *ptlatcmd=0;
     int waitIdxs[MAX_152_EVENT];
     char matcmd[MAX_152_EVENT];
+    char simcmd[MAX_152_EVENT];
     char minfo[12];
     char cordbuf[16];
     char indexfo[2];
@@ -56466,6 +56472,8 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
             memset(waitIdxs, 0, MAX_152_EVENT*sizeof(int)); 
             
             memset(matcmd, 0, MAX_152_EVENT);
+
+            memset(simcmd, 0, MAX_152_EVENT);
             
             idxInit = 1;
 
@@ -57941,6 +57949,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             matcmd[2] = 0;
                             matcmd[3] = 0;
 
+                            simcmd[0] = 0;
+                            simcmd[1] = 0;
+                            simcmd[2] = 0;
+                            simcmd[3] = 0;
+
                             pubffcd[0] = 0;
                             pubffcd[1] = 0;
                             pubffcd[2] = 0;
@@ -58375,9 +58388,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     ptusbmeta = ptscaninfo;
 
-                                    #if MFOUR_SIM_MODE
+                                    //#if MFOUR_SIM_MODE
+                                    if (simcmd[ins] == 'W') {
                                     ptusbmeta->PRI_O_SEC = 0;
-                                    #endif
+                                    }
+                                    //#endif
 
                                 } else {
                                     memset(ptscaninfoduo, 0xff, sizeof(struct aspMetaDataviaUSB_s));
@@ -58385,9 +58400,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     ptusbmeta = ptscaninfoduo;
                                     
-                                    #if MFOUR_SIM_MODE
+                                    //#if MFOUR_SIM_MODE
+                                    if (simcmd[ins] == 'W') {
                                     ptusbmeta->PRI_O_SEC = 1;
-                                    #endif
+                                    }
+                                    //#endif
                                 }
 
                                 msync(ptusbmeta, sizeof(struct aspMetaDataviaUSB_s), MS_SYNC);
@@ -58541,19 +58558,23 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         ptinfomod = ptscaninfo;
                                     }
                                     
-                                    #if MFOUR_SIM_MODE
+                                    //#if MFOUR_SIM_MODE
+                                    if (simcmd[ins] == 'W') {
                                     //mrs_ipc_put(mrs, "s", 1, 2);
                                     if (ptinfomod->PRI_O_SEC == 0) {
                                         write(infd[15], indexfo, 2);
                                     } else {
                                         write(infd[16], indexfo, 2);
                                     }
-                                    #else
+                                    }
+                                    //#else
+                                    else {
                                     ring_buf_prod(&mrs->dataRx);
                                     
                                     mrs_ipc_put(mrs, "o", 1, 2);
                                     mrs_ipc_put(mrs, indexfo, 2, 2);
-                                    #endif //#if MFOUR_SIM_MODE
+                                    }
+                                    //#endif //#if MFOUR_SIM_MODE
                                     
                                     sprintf_f(mrs->log, "[GW] out%d id:%d put info: 0x%.2x + 0x%.2x remain: %d total count: %d index: 0x%.3x (%d) - end of transmission \n", 
                                                                   ins, outfd[ins], indexfo[0], indexfo[1], cycCnt[ins], pubffcd[ins]->ubcylcnt, pubffcd[ins]->ubindex, pubffcd[ins]->ubindex & 0x3ff);
@@ -58757,6 +58778,13 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             //write(outfd[ins], &pllcmd[ins], 1);
                             //sprintf_f(mrs->log, "[GW] out%d id:%d put chr: %c(0x%.2x) - stall of transmission !!! \n", ins, outfd[ins], pllcmd[ins], pllcmd[ins]);
                             //print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                        else if (pllcmd[ins] == 'W') {
+
+                            simcmd[ins] = 'W';
+                            
+                            sprintf_f(mrs->log, "[GW] id:%d simmode enabled !!!\n", ins);
+                            print_f(mrs->plog, "fs152", mrs->log);
                         }
                         else if (pllcmd[ins] == 'B') {
                             sprintf_f(mrs->log, "[GW] id:%d conti read stop !!!\n", ins);
@@ -62077,7 +62105,7 @@ static int p3(struct procRes_s *rs)
                 //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
                 
             }
-            #if MFOUR_SIM_MODE
+            #if 1//MFOUR_SIM_MODE
             else if (cmode == 9) {
                 //sprintf_f(rs->logs, "sim cmode: %d\n", cmode);
                 //print_f(rs->plogs, "P3", rs->logs);
@@ -71732,7 +71760,7 @@ static int p8(struct procRes_s *rs)
 #endif
 
 #if AUTO_RUN_SIM
-#define SIM_NUM_SIM  100
+#define SIM_NUM_SIM  30
 #define SIM_LATE_US_S (60000)
 #endif
 
@@ -73829,6 +73857,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 break;
             }
 
+            chq = 'W';
+            pieRet = write(pPrx[1], &chq, 1);
+            
             chq = 'E';
             pieRet = write(pPrx[1], &chq, 1);
             
@@ -76628,7 +76659,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
     return 0;
 }
 
-#define LOG_P9_EN (1)
+#define LOG_P9_EN (0)
 static int p9(struct procRes_s *rs)
 {
     int ret=0;
@@ -76653,7 +76684,7 @@ static int p9(struct procRes_s *rs)
     return 0;
 }
 
-#define LOG_P10_EN (1)
+#define LOG_P10_EN (0)
 static int p10(struct procRes_s *rs)
 {
     int ret=0;
@@ -80093,7 +80124,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     iubsBuff[16] = opc;
                                     iubsBuff[17] = dat;
 
-                                    //opc = 0x0f;  // feed paper
+                                    opc = 0x0f;  // zebra recv paper
                                     #endif
                                     
                                     if (usbid01) {
@@ -87355,11 +87386,12 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     return 0;
 }
 
-#define MEM_SPEEDUP_READ_EN (0)
-static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max)
+#define MEM_SPEEDUP_READ_EN (1)
+static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max, int opc)
 {
-    static char *bmpSampleaddr[2]={0};
-    static int bmpsamplesize[2]={0};
+   #define PRESET_ADDRESS_NUM (2)
+    static char *bmpSampleaddr[PRESET_ADDRESS_NUM]={0};
+    static int bmpsamplesize[PRESET_ADDRESS_NUM]={0};
     int image_size=0, mul=0, tail=0, shf=0, ix=0, rawlen=0, exlen=0, yllen=0, val=0, mtlen=0, sel=0;
     unsigned char *pt=0, *pmeta=0, *pexmt=0;
     //mfour_rjob_cmd cmd;
@@ -87367,12 +87399,11 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     char fname[32] = "char_H%.3d.jpg";
     char *bmpsrc=0;
     
-    #if SAMPLE_WARM_UP
-    char filetest[128] = "/home/root/banknote/start/H%.3d.bmp";
-    #else
-    char filetest[128] = "/home/root/banknote/raw/H%.3d.bmp";
-    #endif
+    char filetestStart[128] = "/home/root/banknote/start/H%.3d.bmp";
+    char filetestSim[128] = "/home/root/banknote/raw/H%.3d.bmp";
 
+    char *filetest=0;
+    
     int ret=0;
     FILE *f=0, *f1=0, *f2=0;
     int size=0;
@@ -87387,12 +87418,18 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     if (!rs) return -1;
     if ((mbidx < 0) || (mbidx >= 4)) return -2;
 
+    if (opc == 0x10) {
+        filetest = filetestStart;
+    } else {
+        filetest = filetestSim;
+    }
+
     pdec = rs->pbDecMfour[mbidx];
     aspBMPdecodeBuffGetIdx(pdec, &imgidx);
 
-    sel = midx % 2;
-
-    //sprintf_f(rs->logs,"open m4 sample file midx: %d, sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
+    sel = midx % PRESET_ADDRESS_NUM;
+    
+    //sprintf_f(rs->logs,"open m4 sample file midx: %d (p/s:%d), sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", imgidx, midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
     //print_f(rs->plogs, "fIle", rs->logs);
 
 
@@ -87401,87 +87438,91 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     simmax = *max;
 
     if (!bmpSampleaddr[sel]) {
-
-    f1 = fopen(filename, "r");
-    if(f1) {
-        f = f1;    
-    } else {
-        if (simmax < 0) {
-            if (imgidx > 0) {
-                simidx = imgidx - 1;
-
-                sprintf(filename, filetest, simidx);
-                f2 = fopen(filename, "r");
-                if (f2) {
-                    simmax = simidx;
-                    fclose(f2);
-                } else {
-                    simmax = simidx - 1;
+        f1 = fopen(filename, "r");
+        if(f1) {
+            f = f1;    
+        } else {
+            if (simmax < 0) {
+                if (imgidx > 0) {
+                    simidx = imgidx - 1;
+        
+                    sprintf(filename, filetest, simidx);
+                    f2 = fopen(filename, "r");
+                    if (f2) {
+                        simmax = simidx;
+                        fclose(f2);
+                    } else {
+                        simmax = simidx - 1;
+                    }
+                    *max = simmax;
+                    simidx = ((imgidx - 1) % simmax) + 1;
+                    sprintf(filename, filetest, simidx);
+                    f = fopen(filename, "r");
                 }
-                *max = simmax;
+            } else {
                 simidx = ((imgidx - 1) % simmax) + 1;
                 sprintf(filename, filetest, simidx);
                 f = fopen(filename, "r");
             }
-        } else {
-            simidx = ((imgidx - 1) % simmax) + 1;
-            sprintf(filename, filetest, simidx);
-            f = fopen(filename, "r");
         }
-    }
-
-    if (!f) {
-        sprintf_f(rs->logs,"open file error %s errno=%d\r\n", filename, errno);
+        
+        if (!f) {
+            sprintf_f(rs->logs,"open file error %s errno=%d\r\n", filename, errno);
+            print_f(rs->plogs, "fIle", rs->logs);
+            return -3;
+        }
+        
+        sprintf_f(rs->logs,"open m4 sample file: [%s] file: %d, img: %d, max: %d\n", filename, simidx, imgidx, simmax);
         print_f(rs->plogs, "fIle", rs->logs);
-        return -3;
-    }
-
-    sprintf_f(rs->logs,"open m4 sample file: [%s] file: %d, img: %d, max: %d\n", filename, simidx, imgidx, simmax);
-    print_f(rs->plogs, "fIle", rs->logs);
-    
-
-    ret |= fseek(f, 0, SEEK_END);
-
-    size = ftell(f);
-    bmpsamplesize[sel] = size;
-
-    ret |= fseek(f, 0, SEEK_SET);
-
-    if (ret) {
-        return -4;
-    }
-
-    decraw = &pdec->aspDecRaw; //bmp
-    decimgp = decraw->aspDcData;
-
-    decmeta = &pdec->aspDecMeta; //meta
-
-    decexmt = &pdec->aspDecMetaex; //meta
-    
-    img_param = decimgp;
-
-    if (size > decraw->aspDcMax) {
+        
+        
+        ret |= fseek(f, 0, SEEK_END);
+        
+        size = ftell(f);
+        bmpsamplesize[sel] = size;
+        
+        ret |= fseek(f, 0, SEEK_SET);
+        
+        if (ret) {
+            return -4;
+        }
+        
+        decraw = &pdec->aspDecRaw; //bmp
+        decimgp = decraw->aspDcData;
+        
+        decmeta = &pdec->aspDecMeta; //meta
+        
+        decexmt = &pdec->aspDecMetaex; //meta
+        
+        img_param = decimgp;
+        
+        if (size > decraw->aspDcMax) {
+            fclose(f);
+            return -5;
+        }
+        
+        image_size = fread(img_param->mfourData, 1, size, f);
+        if ((image_size < 0) || (image_size != size)) {
+            sprintf_f(rs->logs,"read file error %s errno=%d ret=%d \r\n", filename, errno, image_size);
+            print_f(rs->plogs, "fIle", rs->logs);
+            fclose(f);
+            return -6;
+        }
+        
         fclose(f);
-        return -5;
-    }
+        
+        #if MEM_SPEEDUP_READ_EN
+        if (opc == 0x10) {
+            bmpSampleaddr[sel] = 0;
+        } else {
+            bmpSampleaddr[sel] = malloc(size);
+            memcpy(bmpSampleaddr[sel], img_param->mfourData, size);
+        }
+        #else
+        bmpSampleaddr[sel] = 0;
+        #endif
+        
 
-    image_size = fread(img_param->mfourData, 1, size, f);
-    if ((image_size < 0) || (image_size != size)) {
-        sprintf_f(rs->logs,"read file error %s errno=%d ret=%d \r\n", filename, errno, image_size);
-        print_f(rs->plogs, "fIle", rs->logs);
-        fclose(f);
-        return -6;
-    }
-    
-    fclose(f);
-    
-    #if MEM_SPEEDUP_READ_EN
-    bmpSampleaddr[sel] = malloc(size);
-    memcpy(bmpSampleaddr[sel], img_param->mfourData, size);
-    #else
-    bmpSampleaddr[sel] = 0;
-    #endif
-    
     }
     else {
         decraw = &pdec->aspDecRaw; //bmp
@@ -87498,16 +87539,16 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
 
         memcpy(img_param->mfourData, bmpsrc, size);
 
-        sprintf_f(rs->logs,"sample src copy done addr: 0x%.8x size: %d sel: %d(%d)\n", (uint32_t)bmpsrc, size, sel, imgidx);
-        print_f(rs->plogs, "fIle", rs->logs);
+        //sprintf_f(rs->logs,"sample src copy done addr: 0x%.8x size: %d sel: %d(%d)\n", (uint32_t)bmpsrc, size, sel, imgidx);
+        //print_f(rs->plogs, "fIle", rs->logs);
         
     }
     
     tail = size % 512;
     mul = (size - tail) / 512;
 
-    sprintf_f(rs->logs,"read file: [%s] size: %d, mul: %d, tail: %d \n", filename, size, mul, tail);
-    print_f(rs->plogs, "fIle", rs->logs);
+    //sprintf_f(rs->logs,"read file: [%s] size: %d, mul: %d, tail: %d \n", filename, size, mul, tail);
+    //print_f(rs->plogs, "fIle", rs->logs);
 
     msync(img_param->mfourData, size, MS_SYNC);
 
@@ -88189,7 +88230,7 @@ static int save_done_area(struct procRes_s *rs, int clidx, int mfidx)
 }
 
 #define SAVE_DONE_IMG (0)
-#define LOG_P12_EN (1)
+#define LOG_P12_EN (0)
 static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
@@ -88997,6 +89038,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     CFLOAT throughput=0.0;
     int simMax=-1;
     uint32_t seqnum=0, cindxseq=0;
+    char *iubsBuff=0;
     //int coffsetx=0, coffsetw=0, coffsety=0, coffseth=0;
     //uint32_t upos1=0, upos4=0, upos9=0, upos11=0;
     //struct procRes_s *rsd=0;
@@ -89078,9 +89120,14 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
     //ptfdc[1].fd = pipeRxd[0];
     //ptfdc[1].events = POLLIN;
 
-    cmd = 0x12;
-    opc = 0x0f;
+    iubsBuff = rs->pmch->mshmem;
 
+    msync(iubsBuff, 32, MS_SYNC);
+    
+    cmd = 0x12;
+    //opc = 0x0f;
+    opc = iubsBuff[16];
+    
     puscur = pushost;
     pinfcur = pinfushost;
     usbCur = puscur->pushring;
@@ -89117,11 +89164,15 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     idlet = time_diff(&tidleS, &tidleE, 1000000);
         
                     #if LOG_JPGH_EN
-                    sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x chr: %d, 0x%.4x \n", idlet, (puimGet==0)?0:(uint32_t)puimGet->uimIdex, (puimCnTH==0)?0:(uint32_t)puimCnTH->uimIdex, chr, chq);
+                    sprintf_f(rs->logs, "[DV] start poll %d ms puimGet: 0x%.8x puimCnTH: 0x%.8x chr: %d, 0x%.4x opc: 0x%.2x\n", idlet, (puimGet==0)?0:(uint32_t)puimGet->uimIdex, (puimCnTH==0)?0:(uint32_t)puimCnTH->uimIdex, chr, chq, opc);
                     print_f(rs->plogs, sp, rs->logs);
                     #endif
                     
                     pipRet = poll(ptfdc, 1, POLL_DELAY);
+
+                    msync(iubsBuff, 32, MS_SYNC);
+                    opc = iubsBuff[16];
+                    
                     if (pipRet <= 0) {
                         clock_gettime(CLOCK_REALTIME, &tidleE);
                         idlet = time_diff(&tidleS, &tidleE, 1000000);
@@ -89132,7 +89183,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                         #endif
         
                         if (puimGet) {
-                            if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f))) {
+                            if ((puimGet->uimGetCnt == 0) && ((opc == 0x0a) || (opc == 0x05) || (opc == 0x0e) || (opc == 0x0f) || (opc == 0x10) || (opc == 0x11))) {
                                 //sprintf_f(rs->logs, "[DV] wait id %d - %d \n", puimGet->uimIdex, puimGet->uimCount);
                                 //print_f(rs->plogs, sp, rs->logs);
         
@@ -89878,7 +89929,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             
                             #if GHP_EN_JPGH
                             //if (((fformat == FILE_FORMAT_RAW) || (fformat == FILE_FORMAT_JPG)) && (opc == 0x0f)) {
-                            if (opc == 0x0f) {
+                            if (opc) {
 
                                 sprintf(rs->logs, "__M4_PROCESS_START(%d)__", buffidx); 
                                 tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
@@ -90617,7 +90668,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
             sprintf(rs->logs, "__MEMCOPY_END(%d)__", buffidx); 
             tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
 
-            #if MFOUR_SIM_MODE
+            //#if MFOUR_SIM_MODE
+            if ((opc == 0x10) || (opc == 0x11))
             if (cswerr == 0) {
                 switch (fformat) {
                 case FILE_FORMAT_JPG:
@@ -90632,7 +90684,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 
                 break;
                 case FILE_FORMAT_RAW:
-                ret = send_image_in_bmp(rs, buffidx, midx, &simMax);
+                ret = send_image_in_bmp(rs, buffidx, midx, &simMax, opc);
                 if (ret) {
                     sprintf_f(rs->logs, "[SIM] Error!!! m4 sim get bmp ret: %d \n", ret);
                     print_f(rs->plogs, sp, rs->logs); 
@@ -90677,7 +90729,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 addrd = exmtaout;
                 lens = extlen;
             }
-            #endif // #if MFOUR_SIM_MODE
+            //#endif // #if MFOUR_SIM_MODE
         
             rawlen = cpylen - lens;
             
@@ -90748,7 +90800,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 
                 jpgout = 0;
                 
-                #if MFOUR_SIM_MODE
+                //#if MFOUR_SIM_MODE
+                if ((opc == 0x10) || (opc == 0x11)) {
                 switch (fformat) {
                 case FILE_FORMAT_JPG:
                     if (cswerr == 0) {
@@ -90775,9 +90828,10 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 ret = cfgTableUpd(pct, ASPOP_IMG_LEN, val);
                 //ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
                 //sprintf_f(rs->logs, "[BMP] hack image length: %d \n", val);
-                //print_f(rs->plogs, sp, rs->logs);                
-                #else
-                
+                //print_f(rs->plogs, sp, rs->logs);
+                }
+                //#else
+                else {
                 sprintf_f(rs->logs, "[BMP] bmphmax: %d, bmph: %d\n", bmphmax, bmph);
                 print_f(rs->plogs, sp, rs->logs);
                 
@@ -90830,7 +90884,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 default:
                     break;
                 }
-                #endif 
+                }
+                //#endif 
 
                 #if GHP_EN_JPGH
                 if (fformat == FILE_FORMAT_JPG) {
@@ -90992,18 +91047,20 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 //dbgBitmapHeader(bheader, val);
             }
 
-            #if MFOUR_SIM_MODE
+            //#if MFOUR_SIM_MODE
             //mfourinfo[0] = 's';
-            
+            if ((opc == 0x10) || (opc == 0x11)) {
             if (cswerr) {
                 mfourinfo[0] = 'd';
             } else {
                 mfourinfo[0] = 's';
             }
-            
-            #else
+            }
+            //#else
+            else {
             mfourinfo[0] = 'd';
-            #endif
+            }
+            //#endif
 
             if (buffidx == 0) {
                 mfourinfo[1] = 0x80;
