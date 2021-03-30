@@ -56169,7 +56169,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 #define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
-#define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
+#define PRI_O_SEC_SELECT (1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -57504,7 +57504,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     while (pubffo) {
                                         //sprintf_f(mrs->log, "    [GW] 0x%.3x:0x%.3x \n", pubffo->ubindex, mindex);
                                         //print_f(mrs->plog, "fs152", mrs->log);
-                                        if ((pubffo->ubindex & 0x3ff) == mindex) {
+                                        if (((pubffo->ubindex & 0x800) == 0) && ((pubffo->ubindex & 0x3ff) == mindex)) {
                                             break;
                                         }
                                         pubffo = pubffo->ubnxt;
@@ -57749,13 +57749,29 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         minfo[8] = cswinf; // 6  // 7
                                         
                                         #if 1 /* memory used debug */
+                                        ix = 0;
                                         pageidx = 0;
                                         if (pubffh) {
                                             pubffm = pubffh;
+                                            pubfft = 0;
                                             while (pubffm) {
+                                                ix++;
                                                 if ((pubffm->ubindex & 0x800) == 0) {
                                                     pageidx += 1;
+                                                } else {
+                                                    
+                                                    #if 1 /* remove unused item */
+                                                    //sprintf_f(mrs->log, "[GW] remove the address index 0x%.8x, %d\n", pubffm->ubindex, pubffm->ubindex & 0x3ff);
+                                                    //print_f(mrs->plog, "fs152", mrs->log);
+
+                                                    if (pubfft) {
+                                                        pubfft->ubnxt = pubffm->ubnxt;
+                                                        free(pubffm);
+                                                        pubffm = pubfft;
+                                                    }
+                                                    #endif
                                                 }
+                                                pubfft = pubffm;
                                                 pubffm = pubffm->ubnxt;
                                             }
                                         }
@@ -57771,7 +57787,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                         
                                         ret = aspBMPdecodeBuffStatusSet(&mrs->bmpDecMfour[bidx], 0);
                                         ret |= aspBMPdecodeBuffSetIdx(&mrs->bmpDecMfour[bidx], mindex);
-                                        sprintf_f(mrs->log, "[GW] decode bmp buff %d set id: %d ret: %d \n", bidx, mindex, ret);
+                                        sprintf_f(mrs->log, "[GW] decode bmp buff %d set id: %d ret: %d loopcnt: %d\n", bidx, mindex, ret, ix);
                                         print_f(mrs->plog, "fs152", mrs->log);
                                         
                                         write(infd[ins], &minfo, 11);
@@ -58215,7 +58231,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     if (!cmdex) {
                                         cmdex = latcmd[ins];
                                     }
-                                    #if DBG_BKN_GATE
+                                    #if 1//DBG_BKN_GATE
                                     sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 1\n", ins, pubffh->ubindex, idxInit, latcmd[ins]);
                                     print_f(mrs->plog, "fs152", mrs->log);
                                     #endif
@@ -58235,7 +58251,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             
                                 if (((cmdex) && (latcmd[ins] != cmdex))) {
 
-                                    #if DBG_BKN_GATE
+                                    #if 1//DBG_BKN_GATE
                                     sprintf_f(mrs->log, "[GW] warnning !! latcmd[%d] != cmdex  %c(0x%.2x) : %c(0x%.2x) \n", ins, latcmd[ins], latcmd[ins], cmdex, cmdex); 
                                     print_f(mrs->plog, "fs152", mrs->log);  
                                     #endif
@@ -58255,7 +58271,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     
                                     idxInit += 1;
                                     
-                                    #if DBG_BKN_GATE
+                                    #if 1//DBG_BKN_GATE
                                     sprintf_f(mrs->log, "[GW] ch%d new index: %d the next is %d latcmd: %c - 2\n", ins, pubffcd[ins]->ubindex, idxInit, latcmd[ins]);
                                     print_f(mrs->plog, "fs152", mrs->log);
                                     #endif
@@ -71760,8 +71776,8 @@ static int p8(struct procRes_s *rs)
 #endif
 
 #if AUTO_RUN_SIM
-#define SIM_NUM_SIM  30
-#define SIM_LATE_US_S (60000)
+#define SIM_NUM_SIM  1000
+#define SIM_LATE_US_S (20000)
 #endif
 
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
@@ -80124,7 +80140,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     iubsBuff[16] = opc;
                                     iubsBuff[17] = dat;
 
-                                    opc = 0x0f;  // zebra recv paper
+                                    //opc = 0x0f;  // zebra recv paper
                                     #endif
                                     
                                     if (usbid01) {
@@ -81160,8 +81176,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
 
                                         
-                                        //if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
-                                        if (cswerr) { // the last page
+                                        if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
+                                        //if (cswerr) { // the last page
                                             pbf = bfs[ix] + bflens[ix];
                     
                                             memcpy(pbf, bfmt, mtlen);
@@ -87386,12 +87402,13 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     return 0;
 }
 
-#define MEM_SPEEDUP_READ_EN (1)
+#define MEM_SPEEDUP_READ_EN (0)
 static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max, int opc)
 {
    #define PRESET_ADDRESS_NUM (2)
     static char *bmpSampleaddr[PRESET_ADDRESS_NUM]={0};
     static int bmpsamplesize[PRESET_ADDRESS_NUM]={0};
+    static int imageSimSelect[PRESET_ADDRESS_NUM]={2,1};
     int image_size=0, mul=0, tail=0, shf=0, ix=0, rawlen=0, exlen=0, yllen=0, val=0, mtlen=0, sel=0;
     unsigned char *pt=0, *pmeta=0, *pexmt=0;
     //mfour_rjob_cmd cmd;
@@ -87412,7 +87429,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     struct bitmapDecodeMfour_s *pdec=0;
     struct bitmapDecodeItem_s *decraw=0, *decmeta=0, *decexmt=0;
     mfour_image_param_st *decimgp=0, *img_param=0;
-    int imgidx=0, simmax=-1, simidx=0;
+    int imgidx=0, simmax=-1, simidx=0, pagid=0, selecImg=0;
     struct aspMetaDataviaUSB_s *pusbmeta=0;
 
     if (!rs) return -1;
@@ -87427,13 +87444,19 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     pdec = rs->pbDecMfour[mbidx];
     aspBMPdecodeBuffGetIdx(pdec, &imgidx);
 
-    sel = midx % PRESET_ADDRESS_NUM;
+    pagid = (imgidx - 1) % 2;
+    pagid = ((imgidx - 1) - pagid) / 2;
+
+    selecImg = (pagid * 2) + ((midx == 13) ? 1 : 2);
     
-    //sprintf_f(rs->logs,"open m4 sample file midx: %d (p/s:%d), sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", imgidx, midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
+    sel = midx % PRESET_ADDRESS_NUM;
+    selecImg = imageSimSelect[sel];
+    imageSimSelect[sel] += 2;
+    
+    //sprintf_f(rs->logs,"open m4 sample file imgidx: %d (selec:%d, page:%d, p/s:%d), sel: %d, 0: 0x%.8x, %d 1: 0x%.8x, %d \n", imgidx, selecImg, pagid, midx, sel, (uint32_t)bmpSampleaddr[0], (uint32_t)bmpsamplesize[0], (uint32_t)bmpSampleaddr[1], (uint32_t)bmpsamplesize[1]);
     //print_f(rs->plogs, "fIle", rs->logs);
 
-
-    sprintf(filename, filetest, imgidx);
+    sprintf(filename, filetest, selecImg);
     
     simmax = *max;
 
@@ -87443,8 +87466,8 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
             f = f1;    
         } else {
             if (simmax < 0) {
-                if (imgidx > 0) {
-                    simidx = imgidx - 1;
+                if (selecImg > 0) {
+                    simidx = selecImg - 1;
         
                     sprintf(filename, filetest, simidx);
                     f2 = fopen(filename, "r");
@@ -87455,12 +87478,12 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
                         simmax = simidx - 1;
                     }
                     *max = simmax;
-                    simidx = ((imgidx - 1) % simmax) + 1;
+                    simidx = ((selecImg - 1) % simmax) + 1;
                     sprintf(filename, filetest, simidx);
                     f = fopen(filename, "r");
                 }
             } else {
-                simidx = ((imgidx - 1) % simmax) + 1;
+                simidx = ((selecImg - 1) % simmax) + 1;
                 sprintf(filename, filetest, simidx);
                 f = fopen(filename, "r");
             }
@@ -87472,7 +87495,7 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
             return -3;
         }
         
-        sprintf_f(rs->logs,"open m4 sample file: [%s] file: %d, img: %d, max: %d\n", filename, simidx, imgidx, simmax);
+        sprintf_f(rs->logs,"open m4 sample file: [%s] file: %d, selec img: %d, imgidx: %d, max: %d\n", filename, simidx, selecImg, imgidx, simmax);
         print_f(rs->plogs, "fIle", rs->logs);
         
         
@@ -87606,14 +87629,14 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
     val = (pexmt[2] << 8) | pexmt[3];
     val += 4;
 
-    if (imgidx % 2) {
-        pusbmeta->PRI_O_SEC = 1;
-    } else {
+    if (midx % 2) {
         pusbmeta->PRI_O_SEC = 0;
+    } else {
+        pusbmeta->PRI_O_SEC = 1;
     }
 
-    pusbmeta->Scaned_Page[0] = imgidx & 0xff;
-    pusbmeta->Scaned_Page[1] = (imgidx >> 8) & 0xff;
+    pusbmeta->Scaned_Page[0] = pagid & 0xff;
+    pusbmeta->Scaned_Page[1] = (pagid >> 8) & 0xff;
 
     sprintf_f(rs->logs, "mass len: %d m_len: %d rec_len: %d meta_len: %d jpeg_len: %d updn: %d\n", exlen, val, yllen, mtlen, rawlen, pusbmeta->PRI_O_SEC); 
     print_f(rs->plogs, "fIle", rs->logs);
