@@ -140,7 +140,7 @@ typedef struct
 }   t_ImageParam;  
 #endif
 
-#define LOG_ALL_DISABLE (0)
+#define LOG_ALL_DISABLE (1)
 
 #define ONLY_ONE_USB (0)
 #if DISABLE_USB
@@ -180,9 +180,9 @@ typedef struct
 #define AP_AUTO (0)
 #define AP_CLR_STATUS (0)
 
-#define PIC_ALL_SEND (1)
+#define PIC_ALL_SEND (0)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (1)
+#define MFOUR_BMP_SEND_BACK (0)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define SAMPLE_WARM_UP (1)
@@ -1788,6 +1788,8 @@ struct mainRes_s{
     // file log
     FILE *flog;
     // time measurement
+    uint32_t bknotedemoTdCnt;
+    struct timespec bknotedemoTd[2];
     struct timespec time[2];
     struct timespec time2[2];
     struct timespec roundtripgoto[2];
@@ -1875,6 +1877,8 @@ struct procRes_s{
     // save data file
     FILE *fdat_s[4];
     // time measurement
+    uint32_t  *pbkdcnt;
+    struct timespec *bkdtd[2];
     struct timespec *tm[2];
     struct timespec *tm2[2];
     struct timespec *rtpTo[2];
@@ -6098,10 +6102,65 @@ static inline void printSysinfo(struct sysinfo *pminfo)
 {
     sysinfo(pminfo);
     
+    #if !LOG_ALL_DISABLE
     printf("   sysinfo free: %ld total: %ld unit: %d \n", pminfo->freeram, pminfo->totalram, pminfo->mem_unit);
     printf("   sysinfo freeswp: %ld totalswp: %ld buff: %ld \n", pminfo->freeswap, pminfo->totalswap, pminfo->bufferram);
     printf("   sysinfo freehi: %ld totalhi: %ld shd: %ld \n", pminfo->freehigh, pminfo->totalhigh, pminfo->sharedram);
+    #endif
 }
+
+static int dbgShowTimeStampDemo(char *str, struct mainRes_s *mrs, struct procRes_s *rs, int shift, char *bks) 
+{
+    uint32_t logconf, tcnt=0;
+    int tdiff=0;
+    char *pstring=0;
+    struct timespec *zot;
+    struct timespec *cur;
+
+    if (!str) return -1;
+    if ((!mrs) && (!rs)) return -2;
+    
+    if (mrs) {
+        logconf = mrs->mspconfig & 0x7;
+        if (logconf) return 0;
+            
+        msync(&mrs->bknotedemoTdCnt, sizeof(uint32_t), MS_SYNC);
+            
+        tcnt = mrs->bknotedemoTdCnt;
+        zot = &mrs->bknotedemoTd[tcnt%2];
+
+        tcnt += 1;
+        cur = &mrs->bknotedemoTd[tcnt%2];
+        
+        mrs->bknotedemoTdCnt = tcnt;
+    }
+
+    if (rs) {
+        logconf = *rs->pmsconfig & 0x7;
+        if (logconf) return 0;
+
+        msync(&rs->pbkdcnt, sizeof(uint32_t), MS_SYNC);
+        
+        tcnt = *(rs->pbkdcnt);
+        zot = rs->bkdtd[tcnt%2];
+
+        tcnt += 1;
+
+        cur = rs->bkdtd[tcnt%2];
+
+        *(rs->pbkdcnt) = tcnt;
+    }
+
+    clock_gettime(CLOCK_REALTIME, cur);    
+    tdiff = time_diff(zot, cur, 1000);
+
+    pstring = str;    
+
+    printf("\n%d %*s[%s] (%d.%d) ms\n", tcnt, shift, "", pstring, tdiff / 1000, tdiff % 1000);
+
+    return tdiff;
+}
+
 
 static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *rs, int shift, char *bks) 
 {
@@ -6127,7 +6186,7 @@ static int dbgShowTimeStamp(char *str, struct mainRes_s *mrs, struct procRes_s *
     clock_gettime(CLOCK_REALTIME, &cur);    
     tdiff = time_diff(zot, &cur, 1000);
     if (logconf == 0) {
-        pstring = str;
+        return tdiff;
     } else if (logconf & 0x1) {
         pstring = str;
     } else if (logconf & 0x2) {
@@ -22594,10 +22653,14 @@ static int doSystemCmd(char *sCommand)
     while (pch) {
     
         if (pch) {
+            #if !LOG_ALL_DISABLE
             printf("[cmd]: %s ", retBuff);
+            #endif
         } else {
             wct++;
+            #if !LOG_ALL_DISABLE
             printf("sCommand: wait count %d...\n", wct);
+            #endif
             if (wct > 999) {
                 break;
             }
@@ -71771,7 +71834,7 @@ static int p8(struct procRes_s *rs)
 #define USB_POLLTIME_US (1000)
 
 #if SAMPLE_WARM_UP
-#define SIM_NUM_WARM  5
+#define SIM_NUM_WARM  3
 #define SIM_LATE_US_W (40000)
 #endif
 
@@ -71977,7 +72040,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         pidvid[1] = 0;
         ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
         if (ret < 0) {
-            perror("usb get vid pid");
+            //perror("usb get vid pid");
             sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
             print_f(rs->plogs, sp, rs->logs);
 
@@ -72418,7 +72481,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 }
                 
                 if (ret < 0) {
-                    perror("usb get vid pid");
+                    //perror("usb get vid pid");
                     sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                     print_f(rs->plogs, sp, rs->logs);
                     
@@ -72879,7 +72942,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
             if (ret < 0) {
-                perror("usb get vid pid");
+                //perror("usb get vid pid");
                 sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                 print_f(rs->plogs, sp, rs->logs);
 
@@ -73945,7 +74008,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 
                 ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
                 if (ret < 0) {
-                    perror("usb get vid pid");
+                    //perror("usb get vid pid");
                     sprintf_f(rs->logs, " rom get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                     print_f(rs->plogs, sp, rs->logs);
                     
@@ -75461,6 +75524,9 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 opc = 0x0e;
             }
             #endif
+
+            sprintf_f(rs->logs, "start scan opc: 0x%.2x dat: 0x%.2x \n", opc, dat);
+            print_f(rs->plogs, sp, rs->logs);
             
             insert_cbw(CBW, CBW_CMD_SEND_OPCODE, opc, dat);
             memcpy(&pkcbw[0], CBW, 32);
@@ -76277,7 +76343,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
             ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
             if (ret < 0) {
-                perror("usb get vid pid");
+                //perror("usb get vid pid");
                 sprintf_f(rs->logs, "alive get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                 print_f(rs->plogs, sp, rs->logs);
                 
@@ -76742,6 +76808,7 @@ static int p10(struct procRes_s *rs)
 #define SCAN_BNOTE_EN (0)
 #endif
 #define SAVE_META_EN (1)
+#define AUTO_TRIGGER_SCAN (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -79058,7 +79125,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 
-                    #if 1//DBG_27_DV
+                    #if DBG_27_DV
                     shmem_dump(ptrecv, recvsz);
                     #endif
                 
@@ -81251,7 +81318,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                     
                     while (1) {
-                        pipRet = poll(ptfd, 1, 1000);
+                        pipRet = poll(ptfd, 1, 300);
                     
                         #if LOG_P11_EN
                         sprintf_f(rs->logs, "[DV] pipeRx get ch: 0x%.2x ret: %d idle: %dms\n", ch, pipRet, idlet);
@@ -81297,7 +81364,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rcmd->plogs, "C11", rcmd->logs);
                                 }
                     
-                                #if 1
+                                #if AUTO_TRIGGER_SCAN
                                 if (opc == 0x10) {
                                     opc = 0x12;
                                     cmd = 0x11;
@@ -84791,6 +84858,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 cmd = 0x12;
                 //opc = 0x10;
                 opc = 0x0f;
+                dat = 0x85;
 
                 iubs->opinfo = opc << 8 | dat;
                 memcpy(iubsBuff, cbw, 31);
@@ -93602,7 +93670,9 @@ static int p17(struct procRes_s *rs)
 
                                 sprintf(rs->logs, "__OCR_END_(LEN:%d)(%s)__", pusbmeta->OCR_strlen, m4startcmd); 
                                 tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
-
+                                
+                                sprintf(rs->logs, "OCR(LEN:%d)(%s)", pusbmeta->OCR_strlen, m4startcmd); 
+                                tmCost = dbgShowTimeStampDemo(rs->logs,  NULL, rs, 32, rs->logs);
                             }                            
 
                             #if DUMP_MFOUR_BMP    
@@ -93848,8 +93918,11 @@ int main(int argc, char *argv[])
         }
 
         fclose(fpssid);
-    } else {
+    }
+    else {
+        #if !LOG_ALL_DISABLE
         printf(" get ssid failed!! \n ");
+        #endif
     }
 
     printf("\n        ======== <%s, git version: %s> ========\n", MSP_VERSION, MSP_GIT);    
@@ -93930,6 +94003,10 @@ int main(int argc, char *argv[])
             pmrs->mspconfig |= 0x4;
             pmrs->mspconfig |= 0x1;
             pmrs->plog->dislog = 1;
+            break;
+        case 5:
+            pmrs->mspconfig = 0;
+            pmrs->plog->dislog = 0;
             break;
         default:
             pmrs->mspconfig |= 0x1;
@@ -95446,8 +95523,11 @@ int main(int argc, char *argv[])
     sprintf(syscmd, "cat /proc/sys/kernel/printk");
     ret = doSystemCmd(syscmd);
 
+    #if !MFOUR_API
     sprintf(syscmd, "/home/root/fw_cortex_m4.sh start");
     ret = doSystemCmd(syscmd);
+    #endif
+    
     #endif
     
     printSysinfo(&minfo);
@@ -96062,6 +96142,11 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pdataRx = &mrs->dataRx;
     rs->fs_s = mrs->fs;
     rs->flog_s = mrs->flog;
+
+    rs->pbkdcnt = &mrs->bknotedemoTdCnt;
+    rs->bkdtd[0] = &mrs->bknotedemoTd[0];
+    rs->bkdtd[1] = &mrs->bknotedemoTd[1];
+
     rs->tm[0] = &mrs->time[0];
     rs->tm[1] = &mrs->time[1];
 
