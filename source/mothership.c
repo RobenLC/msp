@@ -140,7 +140,7 @@ typedef struct
 }   t_ImageParam;  
 #endif
 
-#define LOG_ALL_DISABLE (1)
+#define LOG_ALL_DISABLE (0)
 
 #define ONLY_ONE_USB (0)
 #if DISABLE_USB
@@ -153,7 +153,7 @@ typedef struct
 #define MIN_SECTOR_SIZE (512)
 #define RING_BUFF_NUM (64)
 //#define RING_BUFF_NUM_USB   (1728)//(1728)//(1330)//(1536)
-#define RING_BUFF_NUM_USB   (2200) //(500) //(3200) //(1536) (3200)
+#define RING_BUFF_NUM_USB   (1600) //(500) //(3200) //(1536) (3200)
 #define RING_BUFF_NUM_USBLP   (2200) //(500) //(3200) //(1536) (3200)
 #define USB_BUF_SIZE (65536) //(98304) (65536)
 #define USB_META_SIZE 512
@@ -180,13 +180,13 @@ typedef struct
 #define AP_AUTO (0)
 #define AP_CLR_STATUS (0)
 
-#define PIC_ALL_SEND (0)
+#define PIC_ALL_SEND (1)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (0)
+#define MFOUR_BMP_SEND_BACK (1)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define SAMPLE_WARM_UP (1)
-#define AUTO_RUN_SIM (1)
+#define AUTO_RUN_SIM (0)
 #if SAMPLE_WARM_UP || AUTO_RUN_SIM
 #define MFOUR_SIM_MODE (1)
 #else
@@ -56169,7 +56169,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
 
 #define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (19)
-#define PRI_O_SEC_SELECT (1)   // 0: select pri, 1: seclect sec, -1: disable
+#define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
     sprintf_f(mrs->log, "usb gate !!!\n");
@@ -62258,7 +62258,7 @@ static int p3(struct procRes_s *rs)
 
                         clock_gettime(CLOCK_REALTIME, &crpS);
                         
-                        #if 0
+                        #if 1 /* skip crop calcu */
                         ret = getOrg(org, addr, totsz, rs, layeTot);
                         if (ret) {
                             sprintf_f(rs->logs, "m4 getOrg ret: %d layeTot: %d\n", ret, layeTot);
@@ -71776,8 +71776,8 @@ static int p8(struct procRes_s *rs)
 #endif
 
 #if AUTO_RUN_SIM
-#define SIM_NUM_SIM  1000
-#define SIM_LATE_US_S (20000)
+#define SIM_NUM_SIM  20
+#define SIM_LATE_US_S (60000)
 #endif
 
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
@@ -76741,13 +76741,15 @@ static int p10(struct procRes_s *rs)
 #else
 #define SCAN_BNOTE_EN (0)
 #endif
+#define SAVE_META_EN (1)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
     char ch='a';
     char fileidpoll[64] = "/root/scaner/fileidpll.bin";
+    char fileDefaultMeta[128] = "/home/root/banknote/usbMeta.bin";    
     char *fileidbuff=0;
-    FILE *fdpll=0, *fdrd=0;
+    FILE *fdpll=0, *fdrd=0, *fsmeta=0;
     char syscmd11[256] = "ls -al";
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
     struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
@@ -76755,12 +76757,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct pollfd ptfdc[2];
     
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0, ringidx=0;
-    #if 0 /* save meta */
+    #if SAVE_META_EN /* save meta */
     char ptfilepath[128];
     static char ptfileSaveMeta[] = "/home/root/banknote/meta_%.3d.bin";
     static char ptfileSaveWifiMeta[] = "/mnt/mmc2/usb/wmeta_%.3d.bin";
     static char ptfileSavejpg[] = "/home/root/rot_%.3d.jpg";
-    FILE *fsmeta=0;
     #endif
     char elfhead[4] = {0x7f, 0x45, 0x4c, 0x46};
     char cbw[32] = {0x55, 0x53, 0x42, 0x43, 0x20, 0x14, 0x20, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11,
@@ -77148,7 +77149,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         cmd = 0x11;
                         opc = 0x4e;
                         
-                        #if SAMPLE_WARM_UP
+                        #if 0//SAMPLE_WARM_UP
                         opc = 0x10;
                         #endif
                         
@@ -77359,6 +77360,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     break;
                 }
                 else if (getevents[ix].data.fd == rcmd->ppipedn->rt[0]) {
+                    sprintf_f(rs->logs, "[ePol] return opc: 0x%.2x cmd: 0x%.2x \n", opc, cmd);
+                    print_f(rs->plogs, "P11", rs->logs);
+
                     memset(msgret, 0, 64);
                     ret = rs_ipc_get_ms(rcmd, msgret, 64, 10);
                     while (ret > 0) {
@@ -77367,6 +77371,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                         memset(msgret, 0, 64);
                         ret = rs_ipc_get_ms(rcmd, msgret, 64, 10);
+                    }
+
+                    if ((cmd == 0x11) && ((opc == 0x12) || (opc == 0x13))) {
+                        rxfd = rcmd->ppipedn->rt[0];
+                        usbentsRx = 1;
                     }
                 } 
                 else if (getevents[ix].data.fd == rs->ppipedn->rt[0]) {
@@ -77472,7 +77481,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         shmem_dump((char*)ptmetaout, 512);
                         #endif
                 
-                        #if 0 /* save meta */
+                        #if SAVE_META_EN /* save meta */
                         fsmeta = find_save(ptfilepath, ptfileSaveWifiMeta);
                         if (fsmeta) {
                             sprintf_f(rs->logs, "[DV] find save wifi meta [%s] succeed!!! \n", ptfilepath);
@@ -79049,11 +79058,11 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         break;
                     }
                 
-                    #if DBG_27_DV
+                    #if 1//DBG_27_DV
                     shmem_dump(ptrecv, recvsz);
                     #endif
                 
-                    #if 0 /* save meta */
+                    #if SAVE_META_EN /* save meta */
                     fsmeta = find_save(ptfilepath, ptfileSaveMeta);
                     if (fsmeta) {
                         sprintf_f(rs->logs, "[DV] find save meta [%s] succeed!!! \n", ptfilepath);
@@ -79219,6 +79228,179 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
 
                     break;
+                }
+                else if ((cmd == 0x11) && (opc == 0x12)) {
+
+                    fsmeta = fopen(fileDefaultMeta, "r");
+                    if (!fsmeta) {
+                        sprintf_f(rs->logs, "[DV] Error!!! can not open meta file [%s] \n", fileDefaultMeta);
+                        print_f(rs->plogs, "P11", rs->logs);
+
+                        cmd = 0;
+                        opc = 0;
+                        continue;
+                    }
+                    
+                    recvsz = fread(ptrecv, 1, USB_META_SIZE, fsmeta);
+
+                    fclose(fsmeta);
+                    
+                    sprintf_f(rs->logs, "[DV] usb read meta data size: %d / %d [%s] \n====================\n", recvsz, USB_META_SIZE, fileDefaultMeta);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    
+                    if ((recvsz < 0) ||(recvsz != USB_META_SIZE)) {
+                        if (recvsz != USB_META_SIZE) {
+                            shmem_dump(ptrecv, recvsz);
+                        }
+                        
+                        cmd = 0;
+                        opc = 0;
+                        continue;
+                    }
+
+                    usbentsRx = 0;
+                    dat = 0;
+                    
+                    #if 1//DBG_27_DV
+                    shmem_dump(ptrecv, recvsz);
+                    #endif
+                    
+                    memcpy(metaPt, ptrecv, 512);
+                    msync(metaPt, 512, MS_SYNC);
+
+                    memcpy((char*)ptmetain, ptrecv, 512);
+                    msync((char*)ptmetain, 512, MS_SYNC);
+
+                    if ((metaRx->ASP_MAGIC[0] != 0x20) || (metaRx->ASP_MAGIC[1] != 0x14)) {
+                        sprintf_f(rs->logs, "[DV]  Error!!! magic number wrong 0x%.2x 0x%.2x \n", metaRx->ASP_MAGIC[0], metaRx->ASP_MAGIC[1]);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        
+                        cmd = 0;
+                        opc = 0;
+                        continue;
+                    }
+                    
+                    pipRet = aspMetaRelease(msb2lsb32(&ptmetain->FUNC_BITS), 0, rs);
+                    //sprintf_f(rs->logs, "[DV]  meta release ret: %d \n", pipRet);
+                    //print_f(rs->plogs, "P11", rs->logs);
+
+                    #if 1
+                    fs109rs(rs);
+                    #endif
+                    
+                    chq = 'n';
+                    pipRet = write(pipeTx[1], &chq, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+
+                    if (usbid01) {
+                        chq = 'm';
+                        pipRet = write(pipeTx[1], &chq, 1);
+                        if (pipRet < 0) {
+                            sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            continue;
+                        }
+                    }
+
+                    aspMemClear(aspMemAsign, asptotMalloc, 11);
+        
+                    #if 1  /* clean msg queue */
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                        else {
+                            sprintf_f(rs->logs, "[DV] clean pipe get chq: (0x%.2x) \n", chq);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    }
+                
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                        else {
+                            sprintf_f(rs->logs, "[DV] clean pipe get chd: (0x%.2x) \n", chd);
+                            print_f(rs->plogs, "P11", rs->logs);
+                        }
+                    }
+                    
+                    //sprintf_f(rs->logs, "[DV] clean middle - 1 \n");
+                    //print_f(rs->plogs, "P11", rs->logs);
+
+                    if (puimCnTH) {
+                        ix=0;
+                        puimTmp = puimCnTH;
+                        while(puimTmp) {
+                            sprintf_f(rs->logs, "[DV] clean H %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            puimUse = puimTmp;
+                            puimTmp = puimUse->uimNxt;
+                            ix++;
+                
+                            free(puimUse);
+                        }
+                        puimCnTH = 0;
+                        puimCur = 0;
+                        puimGet = 0;
+                        puimCud = 0;
+                    }
+                
+                    if (puimGet) {
+                        ix=0;
+                        puimTmp = puimGet;
+                        while(puimTmp) {
+                            sprintf_f(rs->logs, "[DV] clean G %d - 0x%.2x %d:%d \n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount);
+                            print_f(rs->plogs, "P11", rs->logs);
+                            puimUse = puimTmp;
+                            puimTmp = puimUse->uimNxt;
+                            ix++;
+                
+                            free(puimUse);
+                        }
+                
+                        puimGet = 0;
+                    }
+                
+                    endf = 0;
+                    endm = 0;
+                
+                    distCylcnt = 0;
+                    uimCylcnt = 0;
+                    datCylcnt = 0;
+                    lastCylen = 0;
+                    waitCylen = 0;
+                    rwaitCylen = 0;
+                    maxCylcnt = 0;
+                    
+                    cswerr = 0;
+                    cswstatus[0] = 0;
+                    cswstatus[1] = 0;
+
+                    pagerst = 2;
+
+                    sides[0] = 0;
+                    sides[1] = 0;
+                    #endif
+                    
+                    //sprintf_f(rs->logs, "[DV] clean end \n");
+                    //print_f(rs->plogs, "P11", rs->logs);
+
+                    if (strcmp(msgcmd, "usbscan") != 0) {
+                        sprintf(msgcmd, "usbscan");
+                        rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                    }
+
+                    break;
+                
                 }
                 else if ((cmd == OP_WRITE_FILE) && (opc == 0xff) && (dat == 0)) {
                     if (!iubsBuff) {
@@ -80140,7 +80322,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     iubsBuff[16] = opc;
                                     iubsBuff[17] = dat;
 
-                                    //opc = 0x0f;  // zebra recv paper
+                                    opc = 0x0f;  // zebra recv paper
                                     #endif
                                     
                                     if (usbid01) {
@@ -81049,8 +81231,8 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             #endif
             
             #if SCAN_BNOTE_EN // test code
-            if ((cmd == 0x12) && ((opc == 0x10) || (opc == 0x11))) { /* usbentsTx == 1*/
-                while ((addrd == 0) && ((opc == 0x10) || (opc == 0x11))) {
+            if ((cmd == 0x12) && ((opc == 0x10) || (opc == 0x11) || (opc == 0x13))) { /* usbentsTx == 1*/
+                while ((addrd == 0) && ((opc == 0x10) || (opc == 0x11) || (opc == 0x13))) {
                     for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
                         if (bflens[ix]) {
                             addrd = bfs[ix];
@@ -81115,8 +81297,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rcmd->plogs, "C11", rcmd->logs);
                                 }
                     
+                                #if 1
+                                if (opc == 0x10) {
+                                    opc = 0x12;
+                                    cmd = 0x11;
+                                } else {
+                                    opc = 0;
+                                    cmd = 0;
+                                }
+                                #else
                                 opc = 0;
-                                cmd =0;
+                                cmd = 0;                                
+                                #endif
 
                                 break;
                             }
@@ -81221,7 +81413,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     }
                 }
 
-                if (opc ==0) break;
+                if (cmd != 0x12) break;
                 
                 rlen = lens % 512;
                 msync(addrd, lens, MS_SYNC);
@@ -81268,7 +81460,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     cntTx++;
                 }
 
-                if (opc == 0) break;
+                if (cmd != 0x12) break;
 
                 rlen = lastCylen % 512;
                 //sprintf_f(rs->logs, "[DV] the extra meta size: %d dump: \n", lastCylen);
@@ -81312,7 +81504,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     cntTx++;
                 }
 
-                if (opc == 0) {
+                if (cmd != 0x12) {
 
                     sprintf_f(rs->logs, "[DV] warm up finished!! \n");
                     print_f(rs->plogs, "P11", rs->logs);
@@ -84426,6 +84618,257 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 
                 break;
             }
+            else if ((cmd == 0x11) && (opc == 0x12)) { /* usbentsTx == 1*/
+
+                if (usbid01) {
+                    while (1) {
+                        chq = 0;
+                        pipRet = read(pipeRx[0], &chq, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chq != 'J') {
+                        sprintf_f(rs->logs, "[DV] poll status unknown result, ret: %c (0x%.2x) \n", chq, chq);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+    
+                    while (1) {
+                        chn = 0;
+                        pipRet = read(pipeRx[0], &chn, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+                    
+                    if (chn) {
+                        sprintf_f(rs->logs, "[DV] poll status : (0x%.2x) \n", chn);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+
+                #if BYPASS_TWO
+                if (usbid02) {
+                    chd = 'm';
+                    pipRet = write(pipeTxd[1], &chd, 1);
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);
+                        continue;
+                    }
+                }
+                    
+                if (usbid02) {
+                    while (1) {
+                        chd = 0;
+                        pipRet = read(pipeRxd[0], &chd, 1);
+                        if (pipRet > 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chd != 'J') {
+                        sprintf_f(rs->logs, "[DV] polld status unknown result, ret: %c (0x%.2x) \n", chd, chd);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                    
+                    chm = 0;
+                    while (1) {
+                        pipRet = read(pipeRxd[0], &chm, 1);
+                        if (pipRet < 0) {
+                            break;
+                        }
+                    }
+    
+                    if (chm) {
+                        sprintf_f(rs->logs, "[DV] polld status : (0x%.2x) \n", chm);
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                #endif
+                
+                #if 0
+                csw[11] = 0;
+                csw[12] = chn;
+                #else
+                memcpy(csw, vcswBuff, 13);
+                #endif
+
+                #if DBG_USB_TIME_MEASURE
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                #endif
+                
+                msgret[0] = 'x';
+                msgret[1] = 0x01;
+                pipRet = write(pipeTx[1], msgret, 2);
+                if (pipRet < 0) {
+                    printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                }
+                opc = 0;
+                
+                sprintf(msgcmd, "usbidle");
+                
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
+                if (ret > 0) {
+                    rcmd->logs[ret] = '\n';
+
+                    sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
+                    print_f(rs->plogs, "P11", rs->logs);   
+
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
+                }
+
+                #if 0//SAMPLE_WARM_UP
+                sprintf_f(rs->logs, "[DV] poll status check run warn up \n");
+                print_f(rs->plogs, "P11", rs->logs);
+
+                //#else
+                
+                msgret[0] = 'x';
+                if ((chm == 0xff) && (chn == 0xff)) {
+                    msgret[1] = 0x03;
+                }
+                else {
+                    if ((chm == 0) || (chn == 0)) {
+                        msgret[1] = 0x01;
+                    } else {
+                        msgret[1] = 0x02;
+                    }
+                }
+                
+                pipRet = write(pipeTx[1], msgret, 2);                
+                if (pipRet < 0) {
+                    printf("[DV] Error!!! pipe send scan stop ret: %d \n", pipRet);
+                }
+                
+                sprintf(msgcmd, "usbidle");
+
+                ret = rs_ipc_get_ms(rcmd, rcmd->logs, 4096, 10);
+                if (ret > 0) {
+                    rcmd->logs[ret] = '\n';
+
+                    sprintf_f(rs->logs, "[DV]  get usbscan result ret: %d\n", ret);
+                    print_f(rs->plogs, "P11", rs->logs);   
+
+                    print_f(rcmd->plogs, "C11", rcmd->logs);
+                }
+                #endif
+                
+                //cmd = 0;
+
+                cmd = 0x12;
+                //opc = 0x10;
+                opc = 0x0f;
+
+                iubs->opinfo = opc << 8 | dat;
+                memcpy(iubsBuff, cbw, 31);
+                iubsBuff[15] = cmd;
+                iubsBuff[16] = opc;
+                iubsBuff[17] = dat;
+
+                opc = 0x13;
+
+                puscur = pushost;    
+                pinfcur = pinfushost;
+                
+                #if SCAN_BNOTE_EN // test code
+                if (strcmp(msgcmd, "usbbknote") != 0) {
+                    sprintf(msgcmd, "usbbknote");
+                    rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                }
+                #else
+                if (strcmp(msgcmd, "usbscan") != 0) {
+                    sprintf(msgcmd, "usbscan");
+                    rs_ipc_put(rcmd, msgcmd, strlen(msgcmd));
+                }
+                #endif
+                
+                chq = 'n';
+                pipRet = write(pipeTx[1], &chq, 1);
+                if (pipRet < 0) {
+                    sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                    print_f(rs->plogs, "P11", rs->logs);
+                    continue;
+                }
+
+                usbCur = puscur->pushring;
+                piptx = puscur->pushtx;
+                piprx = puscur->pushrx; 
+
+                if (usbid01) {
+                    chq = 'r';
+                    pipRet = write(pipeTx[1], &chq, 1);                                
+                    if (pipRet < 0) {
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }                                                                      
+                                                                                       
+                if (usbid02) {                                                         
+                    chd = 'r';                                                         
+                    pipRet = write(pipeTxd[1], &chd, 1);                               
+                    if (pipRet < 0) {                                                  
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }                                                                      
+                                                                                       
+                if (usbid01) {                                                         
+                    chq = 'q';                                                         
+                    pipRet = write(pipeTx[1], &chq, 1);                                
+                    if (pipRet < 0) {                                                  
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }                                                                      
+                                                                                       
+                if (usbid02) {                                                         
+                    chd = 'q';                                                         
+                    pipRet = write(pipeTxd[1], &chd, 1);                               
+                    if (pipRet < 0) {                                                  
+                        sprintf_f(rs->logs, "[DV]  pipe send meta ret: %d \n", pipRet);
+                        print_f(rs->plogs, "P11", rs->logs);                           
+                        continue;                                                      
+                    }                                                                  
+                }  
+                
+                break;
+            }
             else if ((cmd == 0x11) && (opc == 0x4e)) { /* usbentsTx == 1*/
 
                 sprintf_f(rs->logs, "[DV] wait poll status check \n");
@@ -84527,7 +84970,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                     print_f(rcmd->plogs, "C11", rcmd->logs);
                 }
                 
-                cmd = 0;
+                //cmd = 0;
 
                 cmd = 0x12;
                 opc = 0x10;
@@ -85141,6 +85584,79 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
 
                 sprintf_f(rs->logs, "[DV] 0x15 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
+                print_f(rs->plogs, "P11", rs->logs);
+                shmem_dump(csw, wrtsz);
+                
+                cmd = 0;
+                break;
+            }
+            else if (cmd == 0x16) { /* usbentsTx == 1*/
+                csw[11] = 0;
+                csw[12] = 0;//seqtx;
+
+                wrtsz = 0;
+                retry = 0;
+                while (1) {
+                    wrtsz = usbc_write(usbfd, csw, 13);
+
+                    #if DBG_27_DV
+                    sprintf_f(rs->logs, "[DV] usb TX size: %d \n====================\n", wrtsz); 
+                    print_f(rs->plogs, "P11", rs->logs);
+                    #endif
+                    
+                    if (wrtsz > 0) {
+                        break;
+                    }
+                    retry++;
+                    if (retry > 32768) {
+                        break;
+                    }
+                }
+
+                #if DBG_USB_TIME_MEASURE
+                if (!fintvalE[0]) {
+                    clock_gettime(CLOCK_REALTIME, &intvalE[0]);
+                    fintvalE[0] = 1;
+                
+                    if (fintvalE[1]) {
+                
+                        tmCost = time_diff(&intvalE[1], &intvalE[0], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 1\n", time_get_ms(&intvalE[0]), time_get_ms(&intvalE[1]), tmCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[1] = 0;
+                    }
+                    else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 1\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                } else {
+                
+                    if (!fintvalE[1]) {
+                        clock_gettime(CLOCK_REALTIME, &intvalE[1]);
+                        fintvalE[1] = 1;
+                
+                        tmCost = time_diff(&intvalE[0], &intvalE[1], 1000);
+                        sprintf_f(rs->logs, "[DV] TX interval end: %llu ms start: %llu ms diff: %d us - 2\n", time_get_ms(&intvalE[1]), time_get_ms(&intvalE[0]), tmCost);
+                        print_f(rs->plogs, "P11", rs->logs);
+                
+                        fintvalE[0] = 0;
+                    } else {
+                        sprintf_f(rs->logs, "[DVF] TX interval should not be here !!! - 2\n");
+                        print_f(rs->plogs, "P11", rs->logs);
+                    }
+                }
+                #endif
+                
+                if (wrtsz < 0) {
+                    //usbentsTx = 0;
+                    continue;
+                }
+
+                sprintf(rs->logs, "__USB_SEND CSW_[%.2x][%.2x][%.2x]__", csw[10], csw[11], csw[12]); 
+                dbgShowTimeStamp(rs->logs,  NULL, rs, 2, rs->logs);
+
+                sprintf_f(rs->logs, "[DV] 0x16 cmd: 0x%.2x opc: 0x%.2x dump csw: \n", cmd, opc); 
                 print_f(rs->plogs, "P11", rs->logs);
                 shmem_dump(csw, wrtsz);
                 
@@ -87402,7 +87918,7 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     return 0;
 }
 
-#define MEM_SPEEDUP_READ_EN (0)
+#define MEM_SPEEDUP_READ_EN (1)
 static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max, int opc)
 {
    #define PRESET_ADDRESS_NUM (2)
