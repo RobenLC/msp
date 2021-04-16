@@ -6156,7 +6156,7 @@ static int dbgShowTimeStampDemo(char *str, struct mainRes_s *mrs, struct procRes
 
     pstring = str;    
 
-    printf("\n%d %*s[%s] (%d.%d) ms\n", tcnt, shift, "", pstring, tdiff / 1000, tdiff % 1000);
+    printf("\n%d %*s %s (%d.%d) ms\n", tcnt, shift, "", pstring, tdiff / 1000, tdiff % 1000);
 
     return tdiff;
 }
@@ -16256,9 +16256,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
              ret = getVectorFromP(v3, p5, p6);
              ret = getCross(v1, v2, cs);
              ret = getCross(v2, v3, ct);
-
+#if LOG_CROP_FINDPOINTS
              printf("[LF %d-RT %d]  =  cs:(%lf, %lf) ct:(%lf, %lf)\n", lfLinSize, rtLinSize, cs[0], cs[1], ct[0], ct[1]);
-
+#endif
              id = 0;
              upal = Rtarr[id*2+0];
     
@@ -16777,9 +16777,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
              ret = getVectorFromP(v3, p5, p6);
              ret = getCross(v1, v2, cs);
              ret = getCross(v2, v3, ct);
-
+#if LOG_CROP_FINDPOINTS
              printf("[LF %d-RT %d]  =  cs:(%lf, %lf) ct:(%lf, %lf)\n", lfLinSize, rtLinSize, cs[0], cs[1], ct[0], ct[1]);
-        
+#endif
              id = 0;
              upal = Lfarr[id*2+0];
     
@@ -16860,7 +16860,9 @@ static int findUniPoints(struct aspCrop36_s *pcp36, struct aspCropExtra_s *pcpex
         printf("slf = (%lf, %lf), srt = (%lf, %lf) \n", slf[0], slf[1], srt[0], srt[1]);    
 #endif
     } else {
+        #if LOG_CROP_FINDPOINTS
         printf("Warnning!!!  sup || sdn || slf || srt == null!!! \n");
+        #endif
     }
 
     memcpy(pcpex->crpexMostLt, slf, sizeof(CFLOAT)*2);    
@@ -38659,6 +38661,29 @@ static uint32_t shmem_check(char *src, int size)
     return tag;
 }
 
+static int shmem_dump_demo(char *src, int size)
+{
+    char str[128];
+    int inc;
+    if (!src) return -1;
+
+    inc = 0;
+    printf("memdump[0x%.8x] sz%d: \n", (uint32_t)src, size);
+    while (inc < size) {
+        printf("%.2x ", *src);
+
+        if (!((inc+1) % 16)) {
+            printf(" %d \n", inc+1);
+        }
+        inc++;
+        src++;
+    }
+
+    printf("\n");
+
+    return inc;
+}
+
 static int shmem_dump(char *src, int size)
 {
     char str[128];
@@ -38685,6 +38710,7 @@ static int shmem_dump(char *src, int size)
 
     return inc;
 }
+
 static int shmem_from_str(char **addr, char *dst, char *sz)
 {
     char *stop_at;
@@ -76808,7 +76834,7 @@ static int p10(struct procRes_s *rs)
 #define SCAN_BNOTE_EN (0)
 #endif
 #define SAVE_META_EN (1)
-#define AUTO_TRIGGER_SCAN (1)
+#define AUTO_TRIGGER_SCAN (0)
 static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -76819,9 +76845,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     FILE *fdpll=0, *fdrd=0, *fsmeta=0;
     char syscmd11[256] = "ls -al";
     struct epoll_event eventRx, eventTx, getevents[MAX_EVENTS];
-    struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd;
+    struct epoll_event evtrs, evtrsd, evtrcmd, evtpipr, evtpiprd, evtstdin;
     struct pollfd ptfd[1];
     struct pollfd ptfdc[2];
+    struct pollfd ptfdstdin[1];
     
     int udevfd=0, epollfd=0, uret=0, ifx=0, rxfd=0, txfd=0, cntTx=0, lastsz=0, ringidx=0;
     #if SAVE_META_EN /* save meta */
@@ -76907,9 +76934,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     struct bitmapDecodeMfour_s *pmbf=0;
     char *bfs[8]={0}, *bfmt=0, *bfex=0, *pbf=0;
     int bflens[8]={0}, mtlen=0, exlen=0;
-    
+    int fdstdin=STDIN_FILENO;
     //pipe2(pipeusb, O_NONBLOCK);
     //pipe2(pipepc, O_NONBLOCK);
+
 
     pubf = rs->pusbfile;
     fileidbuff = malloc(32768 + 12);
@@ -76917,6 +76945,18 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         sprintf_f(rs->logs, "Error!!! file id buff memory allocate failed  !!! \n");
         print_f(rs->plogs, "P11", rs->logs);
     }
+
+    #if 0 /* hold the demo after msp trigger */
+    while (1) {
+        memset(msgret, 0, 64);
+        ret = read(fdstdin, msgret, 64);
+        //sprintf_f(rs->logs, "read [%s] ret: %d\n", msgret, ret);
+        //print_f(rs->plogs, "P11", rs->logs);
+
+        if (ret > 0) break;
+    }
+    #endif
+    
     
     pinfushost = rs->pusbmh[0];
     if (!pinfushost) {
@@ -77051,6 +77091,17 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
         print_f(rs->plogs, "P11", rs->logs);
     }
 
+    #if 0
+    evtstdin.data.fd = fdstdin;
+    evtstdin.events = EPOLLIN | EPOLLLT;
+    ret = epoll_ctl (epollfd, EPOLL_CTL_ADD, fdstdin, &evtstdin);
+    if (ret == -1) {
+        perror ("epoll_ctl");
+        sprintf_f(rs->logs, "stdin spoll set ctl failed errno: %ds\n", errno);
+        print_f(rs->plogs, "P11", rs->logs);
+    }
+    #endif
+    
     ptrecv = malloc(USB_BUF_SIZE);
     if (ptrecv) {
         sprintf_f(rs->logs, " recv buff alloc succeed! size: %d \n", USB_BUF_SIZE);
@@ -77064,6 +77115,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
     ptfd[0].fd = pipeRx[0];
     ptfd[0].events = POLLIN;
 
+    ptfdstdin[0].fd = fdstdin;
+    ptfdstdin[0].events = POLLIN;
+    
 #if DBG_USB_TIME_MEASURE
     memset(fintvalS, 0, sizeof(int) * 2);
     memset(fintvalE, 0, sizeof(int) * 2);
@@ -77080,6 +77134,38 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
             sprintf_f(rs->logs, "[ePol] failed errno: %d ret: %d\n", errno, uret);
             print_f(rs->plogs, "P11", rs->logs);
         } else if (uret == 0) {
+            while (1) {
+                ret = poll(ptfdstdin, 1, 10);
+
+                //sprintf_f(rs->logs, "[ePol] stdin pool ret: %d \n", ret);
+                //print_f(rs->plogs, "P11", rs->logs);
+
+                if (ret > 0) {
+                    memset(msgret, 0, 64);
+
+                    ret = read(fdstdin, msgret, 64);
+
+                    sprintf_f(rs->logs, "[ePol] input str [%s] ret: %d \n", msgret, ret);
+                    print_f(rs->plogs, "P11", rs->logs);
+
+                    if (strncmp(msgret, "r", 1) == 0) {
+
+                        *(rs->pbkdcnt) = 0;
+
+                        clock_gettime(CLOCK_REALTIME, rs->bkdtd[0]);  
+                        clock_gettime(CLOCK_REALTIME, rs->bkdtd[1]);  
+    
+                        cmd = 0x11;
+                        opc = 0x12;
+                        dat = 0x85;
+                        usbentsRx = 1;
+                    }
+
+                    break;
+                }
+
+                break;
+            }
             
             #if 1
             if (!usbfd) {
@@ -77425,6 +77511,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                     idlcnt = 0;
                     break;
+                }
+                else if (getevents[ix].data.fd == fdstdin) {
+                    sprintf_f(rs->logs, "[ePol] stdin get ch \n");
+                    print_f(rs->plogs, "P11", rs->logs);
+                    memset(msgret, 0, 64);
+                    ret = read(fdstdin, msgret, 64);
+
+                    sprintf_f(rs->logs, "[ePol] input:[%s] len: %d \n", msgret, ret);
+                    print_f(rs->plogs, "P11", rs->logs);                    
+
                 }
                 else if (getevents[ix].data.fd == rcmd->ppipedn->rt[0]) {
                     sprintf_f(rs->logs, "[ePol] return opc: 0x%.2x cmd: 0x%.2x \n", opc, cmd);
@@ -88438,12 +88534,12 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     signed short rotAngle=0;
     
     #if DUMP_ROT_BMP
-    static char ptfileSave[] = "/home/root/rotate/rot_%.3d.bmp";
-    static char ptfileRawSave[] = "/home/root/rotate/raw_%.3d.bmp";
+    static char ptfileSave[] = "/home/root/banknote/rotate/rot_%.3d.bmp";
+    static char ptfileRawSave[] = "/home/root/banknote/rotate/raw_%.3d.bmp";
     char filepath[256]={0};
     FILE *fdump=0;
     #endif
-    
+
     decraw = &rs->pbDecMfour[mfidx]->aspDecRaw;
 
     #if LOG_ROT_EN
@@ -88564,10 +88660,9 @@ static int handle_cmd_require_areaR(struct procRes_s *rs, int clidx, int mfidx, 
     //print_f(rs->plogs, "CLIP", rs->logs);    
 
     #if BMP_NO_CPY
+    aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
     if (decraw->aspDcRingAddr) {
         bmpbuff = decraw->aspDcRingAddr;
-    } else {
-        aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
     }
     #else
     aspBMPdecodeItemGet(decraw, &bmpbuff, &rawlen);
@@ -88807,9 +88902,9 @@ static int save_done_area(struct procRes_s *rs, int clidx, int mfidx)
 {
     int ret=0, imgsize=0;
     FILE *fp=0;
-    char filename[256]={0};
+    char filename[512]={0};
     char tailname[32] = "_%.3d.bmp";
-    char filesave[32] = "/asptest/out_%.1d_%.1d";
+    char filesave[256] = "/home/root/banknote/asptest/out_%.1d_%.1d";
     char *ptr=0;
     
     sprintf(filename, filesave, mfidx+1, clidx+1);
@@ -89610,7 +89705,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
 {
     char chq=0, chd=0, che=0, cindexfo[2], mindexfo[2], cinfo[12], cswerr=0, pagerst=2, ch=0, mfourinfo[2];
     char *addrd=0, *palloc=0, *endf=0, *endm=0, *bmpbufc=0, *bmpbuff=0, *addrb=0, *buffmeta=0, *addfirst=0, *addlast=0;
-    char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0, *metaPt=0;
+    char *bmpcpy=0, *pshfmeta=0, *jpgout=0, *bmpcolrtb=0, *ph=0, *exmtaout=0, *bmprot=0, *metaPt=0, *fakebuf=0;
     unsigned char *jpgrlt=0;
     int uimCylcnt=0, seqtx=0, maxsz=0, lens=0, pipRet=0, idlet=0, cindex=0, ix=0, waitCylen=0, chr=0, sendsz=0, cpysz=0, ringidx=0, ringcons=0;
     int usbfd=0, ret=0, act=0, lastCylen=0, cmdprisec=0, bmplen=0, bmpmax=0, uselen=0, cpylen=0, distCylcnt=0, cntTx=0, lenbs=0, shfmeta=0;
@@ -91481,8 +91576,12 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     jpgout = bmpbuff;
 
                     #if BMP_NO_CPY
+                    rs->pbDecMfour[buffidx]->aspDecRaw.aspDcRingAddr = 0;
+                    fakebuf = 0;
                     if ((ringidx + ringcons) <= RING_BUFF_NUM_USB) {
-                        rs->pbDecMfour[buffidx]->aspDecRaw.aspDcRingAddr = addfirst;                    
+                        rs->pbDecMfour[buffidx]->aspDecRaw.aspDcRingAddr = addfirst;
+
+                        fakebuf = bmpbuff;
                         jpgout = addfirst;
                     }
                     #endif
@@ -91645,7 +91744,13 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                     bitmapColorTableSetup(bmpcolrtb+val);
                     blen -= 1024;
                 }
-        
+                
+                #if BMP_NO_CPY
+                if (fakebuf) {
+                    memcpy(fakebuf, bmpcolrtb, 1078);
+                }
+                #endif
+                
                 if (blen) {
                     sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", blen);
                     print_f(rs->plogs, sp, rs->logs);
@@ -93044,7 +93149,7 @@ static int p17(struct procRes_s *rs)
     //tmCost = time_diff(&mfoS, &mfoE, 1000000);
     
     #if DUMP_MFOUR_BMP
-    static char ptfileSave[] = "/home/root/rotate/m4_%.3d_%.1d_%.1d.bmp";
+    static char ptfileSave[] = "/home/root/banknote/rotate/m4_%.3d_%.1d_%.1d.bmp";
     char filepath[256]={0};
     FILE *fdump=0;
     int dumpsize=0;
@@ -93613,7 +93718,7 @@ static int p17(struct procRes_s *rs)
                                     clock_gettime(CLOCK_REALTIME, &mfoE);
                                     tmCost = time_diff(&mfoS, &mfoE, 1000);
 
-                                    //shmem_dump(outchr[1], 32);
+                                    //shmem_dump_demo(outchr[1], 32);
 
                                     pusbmeta->OCR_strlen = strlen(outchr[1]);
                                     if (pusbmeta->OCR_strlen < 16) {
@@ -93635,7 +93740,7 @@ static int p17(struct procRes_s *rs)
                                     clock_gettime(CLOCK_REALTIME, &mfoE);
                                     tmCost = time_diff(&mfoS, &mfoE, 1000);
 
-                                    //shmem_dump(outchr[2], 32);
+                                    //shmem_dump_demo(outchr[2], 32);
                                     
                                     pusbmeta->OCR_strlen = strlen(outchr[2]);
                                     if (pusbmeta->OCR_strlen < 16) {
@@ -93651,28 +93756,45 @@ static int p17(struct procRes_s *rs)
 
                                 sprintf_f(rs->logs, "OCR RtnCode: [0x%x] iJobIdx: %d\n", img_out->mfourAttb.iJobRtnCode, img_out->mfourAttb.iJobIdx);
                                 print_f(rs->plogs, "P17", rs->logs);
-
+                                
+                                memset(m4startcmd, 0, 256);
+                                
                                 #if 1 /* debug show OCR result */
-                                if ((pusbmeta->OCR_strlen > 10) && (pusbmeta->OCR_strlen < 16)) {
-                                    memset(m4startcmd, 0, 256);
+                                if ((pusbmeta->OCR_strlen > 0) && (pusbmeta->OCR_strlen < 16)) {
                                     memcpy(m4startcmd, pusbmeta->OCR_chars, pusbmeta->OCR_strlen);
                                     
                                     if (pusbmeta->OCR_chars[pusbmeta->OCR_strlen-1] == 0x0a) {
                                         m4startcmd[pusbmeta->OCR_strlen-1] = '\0';
+
+                                        pusbmeta->OCR_strlen -= 1;
                                     }
                                     sprintf_f(rs->logs, "OCR result chars: [%s] page: %d(%d) - %d\n", m4startcmd, (imgidx+1)/2, imgidx, pusbmeta->PRI_O_SEC);
                                     print_f(rs->plogs, "P17", rs->logs);
+
+                                    sprintf(rs->logs, "(%.2d)(%s)", pusbmeta->OCR_strlen, m4startcmd); 
+                                    tmCost = dbgShowTimeStampDemo(rs->logs,  NULL, rs, 32, rs->logs);
+
+                                    //shmem_dump_demo(m4startcmd, 16);
+
+                                    
                                 } else {
+                                    memcpy(m4startcmd, pusbmeta->OCR_chars, 15);
+                                    m4startcmd[15] = '\0';
+                                    
                                     sprintf_f(rs->logs, "OCR result chars failed ocrlen: %d page: %d(%d) - %d\n", pusbmeta->OCR_strlen, (imgidx+1)/2, imgidx, pusbmeta->PRI_O_SEC);
                                     print_f(rs->plogs, "P17", rs->logs);
+
+                                    sprintf(rs->logs, "(%.2d > 15) (%s)", pusbmeta->OCR_strlen, m4startcmd); 
+                                    tmCost = dbgShowTimeStampDemo(rs->logs,  NULL, rs, 32, rs->logs);
+
+                                    //shmem_dump_demo(m4startcmd, 16);
+
                                 }
                                 #endif
 
                                 sprintf(rs->logs, "__OCR_END_(LEN:%d)(%s)__", pusbmeta->OCR_strlen, m4startcmd); 
                                 tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
                                 
-                                sprintf(rs->logs, "OCR(LEN:%d)(%s)", pusbmeta->OCR_strlen, m4startcmd); 
-                                tmCost = dbgShowTimeStampDemo(rs->logs,  NULL, rs, 32, rs->logs);
                             }                            
 
                             #if DUMP_MFOUR_BMP    
@@ -94006,7 +94128,6 @@ int main(int argc, char *argv[])
             break;
         case 5:
             pmrs->mspconfig = 0;
-            pmrs->plog->dislog = 0;
             break;
         default:
             pmrs->mspconfig |= 0x1;
@@ -95436,7 +95557,11 @@ int main(int argc, char *argv[])
             sprintf_f(pmrs->log, "can't open device[%s]\n", usbdevpath0); 
             print_f(pmrs->plog, "USB", pmrs->log);
 
+            #if 1 /* for scan without zebra */
+            pmrs->usbdv = 99;
+            #else
             goto end;
+            #endif
         }
         else {
             pmrs->usbdvname = usbdevpath0;
