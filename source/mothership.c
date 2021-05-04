@@ -180,9 +180,9 @@ typedef struct
 #define AP_AUTO (0)
 #define AP_CLR_STATUS (0)
 
-#define PIC_ALL_SEND (0)
+#define PIC_ALL_SEND (1)
 #define MFOUR_IMG_SEND_BACK (0)
-#define MFOUR_BMP_SEND_BACK (0)
+#define MFOUR_BMP_SEND_BACK (1)
 #define MFOUR_SIM_MODE_BMP (0)
 
 #define SAMPLE_WARM_UP (1)
@@ -71869,6 +71869,7 @@ static int p8(struct procRes_s *rs)
 #define SIM_LATE_US_S (60000)
 #endif
 
+#define UNPLUG_SCAN_MACHINE (0)
 static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 {
     struct pollfd ptfd[1];
@@ -72067,7 +72068,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
         ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
         if (ret < 0) {
             //perror("usb get vid pid");
-            sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+            sprintf_f(rs->logs, "0x01 get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
             print_f(rs->plogs, sp, rs->logs);
 
             #if 0
@@ -72086,7 +72087,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             usbid = open(puhsinfo->ushostname, O_RDWR);
 
             if (usbid <= 0) {
-                sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                sprintf_f(rs->logs, "can't open device 0x01 [%s]\n", puhsinfo->ushostname); 
                 print_f(rs->plogs, sp, rs->logs);
 
                 usbid = 0;
@@ -72121,7 +72122,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     usbid = open(puhsinfo->ushostname, O_RDWR);
 
                     if (usbid <= 0) {
-                        sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                        sprintf_f(rs->logs, "can't open device 0x02 [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
 
                         usbid = 0;
@@ -72460,12 +72461,28 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
 
                     usbid = open(puhsinfo->ushostname, O_RDWR);
                     if (usbid <= 0) {
-                        sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                        sprintf_f(rs->logs, "can't open device 0x03 [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
-                        
-                        usbid = 0;
 
+                        #if UNPLUG_SCAN_MACHINE
+                            
+                        if (strncmp("/dev/usb/lp1", puhsinfo->ushostname, 12) == 0) {
+                            usbid = 91;
+                            pidvid[0] = 0x2e96;
+                            pidvid[1] = 0x0a04;
+                        } else {
+                            usbid = 90;
+                            pidvid[0] = 0x2e96;
+                            pidvid[1] = 0x0a03;
+                        }
+
+                        sprintf_f(rs->logs,  "01 sim mode [%s] vid: 0x%.2x pid: 0x%.2x (usbid:%d) \n", puhsinfo->ushostname, pidvid[0], pidvid[1], usbid);
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        #else
+                        usbid = 0;
                         continue;
+                        #endif
                     } else {
                         sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
                         print_f(rs->plogs, sp, rs->logs);
@@ -72476,7 +72493,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         if (ret < 0) {
                             sprintf_f(rs->logs,  "can't get vid pid for [%s]\n", puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
-                            
+
                             close(usbid);
                             usbid = 0;
                             
@@ -72503,12 +72520,17 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     #endif
                 }
                 else {
+                    #if UNPLUG_SCAN_MACHINE
+                    ret = 0;
+                    #else
                     ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
+                    #endif
                 }
+
                 
                 if (ret < 0) {
                     //perror("usb get vid pid");
-                    sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                    sprintf_f(rs->logs, "0x02 get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                     print_f(rs->plogs, sp, rs->logs);
                     
                     err = close(usbid);
@@ -72520,12 +72542,29 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     usbid = open(puhsinfo->ushostname, O_RDWR);
                     
                     if (usbid <= 0) {
-                        sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                        sprintf_f(rs->logs, "can't open device 0x04 [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
 
+                        #if UNPLUG_SCAN_MACHINE
+                            
+                        if (strncmp("/dev/usb/lp1", puhsinfo->ushostname, 12) == 0) {
+                            usbid = 91;
+                            pidvid[0] = 0x2e96;
+                            pidvid[1] = 0x0a04;
+                        } else {
+                            usbid = 90;
+                            pidvid[0] = 0x2e96;
+                            pidvid[1] = 0x0a03;
+                        }
+
+                        sprintf_f(rs->logs,  "01 sim mode [%s] vid: 0x%.2x pid: 0x%.2x (usbid:%d) \n", puhsinfo->ushostname, pidvid[0], pidvid[1], usbid);
+                        print_f(rs->plogs, sp, rs->logs);
+
+                        #else
                         usbid = -1;
 
                         continue;
+                        #endif
                     } else {
                     
                         sprintf_f(rs->logs, "open device[%s] usbid: %d \n", puhsinfo->ushostname, usbid); 
@@ -72559,7 +72598,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                             usbid = open(puhsinfo->ushostname, O_RDWR);
                     
                             if (usbid <= 0) {
-                                sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                                sprintf_f(rs->logs, "can't open device 0x05 [%s]\n", puhsinfo->ushostname); 
                                 print_f(rs->plogs, sp, rs->logs);
 
                                 usbid = -1;
@@ -72969,7 +73008,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
             if (ret < 0) {
                 //perror("usb get vid pid");
-                sprintf_f(rs->logs, "get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                sprintf_f(rs->logs, "0x03 get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                 print_f(rs->plogs, sp, rs->logs);
 
                 #if 0
@@ -72987,7 +73026,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 usbid = open(puhsinfo->ushostname, O_RDWR);
                 
                 if (usbid <= 0) {
-                    sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                    sprintf_f(rs->logs, "can't open device 0x06 [%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
                     usbid = -1;
 
@@ -73030,7 +73069,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                         usbid = open(puhsinfo->ushostname, O_RDWR);
                 
                         if (usbid <= 0) {
-                            sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                            sprintf_f(rs->logs, "can't open device 0x07 [%s]\n", puhsinfo->ushostname); 
                             print_f(rs->plogs, sp, rs->logs);
                             usbid = -1;
 
@@ -73993,7 +74032,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 pllst = 0;
                 usbid = open(puhsinfo->ushostname, O_RDWR);
                 if (usbid <= 0) {
-                    sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                    sprintf_f(rs->logs, "can't open device 0x08 [%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
                         
                     pllst = CSW_STATUS_USB_FAIL;
@@ -74035,7 +74074,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
                 if (ret < 0) {
                     //perror("usb get vid pid");
-                    sprintf_f(rs->logs, " rom get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                    sprintf_f(rs->logs, " rom 0x04 get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                     print_f(rs->plogs, sp, rs->logs);
                     
                     err = close(usbid);
@@ -74047,7 +74086,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                     usbid = open(puhsinfo->ushostname, O_RDWR);
                     
                     if (usbid <= 0) {
-                        sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                        sprintf_f(rs->logs, "can't open device 0x09 [%s]\n", puhsinfo->ushostname); 
                         print_f(rs->plogs, sp, rs->logs);
                         
                         pllst = CSW_STATUS_USB_FAIL;
@@ -76370,7 +76409,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
             ret = USB_IOCT_GET_VID_PID(usbid, pidvid);
             if (ret < 0) {
                 //perror("usb get vid pid");
-                sprintf_f(rs->logs, "alive get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
+                sprintf_f(rs->logs, "alive 0x05 get pid vid failed ret: %d, errno: %d expect vid: 0x%x pid: 0x%x\n", ret, errno, puhsinfo->ushostpidvid[0], puhsinfo->ushostpidvid[1]);
                 print_f(rs->plogs, sp, rs->logs);
                 
                 err = close(usbid);
@@ -76382,7 +76421,7 @@ static int usbhostd(struct procRes_s *rs, char *sp, int dlog)
                 usbid = open(puhsinfo->ushostname, O_RDWR);
                 
                 if (usbid <= 0) {
-                    sprintf_f(rs->logs, "can't open device[%s]\n", puhsinfo->ushostname); 
+                    sprintf_f(rs->logs, "can't open device 0x10 [%s]\n", puhsinfo->ushostname); 
                     print_f(rs->plogs, sp, rs->logs);
                     
                     pllst = CSW_STATUS_USB_FAIL;
