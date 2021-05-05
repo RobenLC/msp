@@ -17,16 +17,23 @@
 #include "BKNote_PreSet.h"
 #include "ImageProcessing.h"
 
-const char Rjob_Buffer[RJOB_BUFF_SIZE] = {0};
+//const char Rjob_Buffer[RJOB_BUFF_SIZE] = {0};
 
-unsigned int __RJob_ShareMem = (unsigned int)&Rjob_Buffer[0];
-unsigned int __RJob_ShareMem_end = (unsigned int)&Rjob_Buffer[RJOB_BUFF_SIZE - 1];
+//unsigned int __RJob_ShareMem = (unsigned int)&Rjob_Buffer[0];
+//unsigned int __RJob_ShareMem_end = (unsigned int)&Rjob_Buffer[RJOB_BUFF_SIZE - 1];
 //unsigned int RJob_TX_ShareMem = (unsigned int)&(Rjob_Buffer[RJOB_BUFF_SIZE/2]);
-unsigned int RJob_TX_ShareMem = 0;
-unsigned int RJob_TX_ShareMemDuo = 0;
+//unsigned int RJob_TX_ShareMem = 0;
+//unsigned int RJob_TX_ShareMemDuo = 0;
 
-static int mfourPipEpt1[2] = {0};
-static int mfourPipEpt2[2] = {0};
+//static int mfourPipEpt1[2] = {0};
+//static int mfourPipEpt2[2] = {0};
+
+struct mfour_rs_t {
+    unsigned int RJob_TX_ShareMem;
+    unsigned int RJob_TX_ShareMemDuo;
+    int mfourPipEpt1[2];
+    int mfourPipEpt2[2];
+};
 
 static int dbg_rjob_cmd(t_rjob_cmd *rjcmd, int len)
 {  
@@ -54,6 +61,7 @@ static int dbg_rjob_cmd(t_rjob_cmd *rjcmd, int len)
     return 0;
 }
 
+/*
 int mfourSetPipEpt1(int *pip)
 {
     log_info("%s - 0: %d, 1: %d\n",__func__, pip[0], pip[1]);
@@ -69,15 +77,19 @@ int mfourSetPipEpt2(int *pip)
 
     return 0;
 }
+*/
 
-static int OPENAMP_send(int *pip, t_rjob_cmd *pc, int sizec)
+static int OPENAMP_send(struct mfour_rs_t *omfrs, t_rjob_cmd *pc, int sizec)
 {
     int ret=0;
     char cmd[2]={0};
     char *dst=0;
+    int *pip=0;
 
-    if (RJob_TX_ShareMemDuo && pc->mPtr && pc->dSize) {
-        dst = (char *)RJob_TX_ShareMemDuo;
+    pip = omfrs->mfourPipEpt2;
+
+    if (omfrs->RJob_TX_ShareMemDuo && pc->mPtr && pc->dSize) {
+        dst = (char *)omfrs->RJob_TX_ShareMemDuo;
         memcpy(dst, pc->mPtr, pc->dSize);
         pc->mPtr = dst;;
     }
@@ -118,11 +130,11 @@ t_image_task_status img_task_status = {
 //          it need to receive a command from A7 to update it to correct value
 //          otherwise OPENAMP_send() will fail
 //*****************************************************************************
-int send_rjob_cmd(t_rjob_cmd *pcmd)
+int send_rjob_cmd(t_rjob_cmd *pcmd, struct mfour_rs_t *amfrs)
 {
     int ret;
     
-    ret = OPENAMP_send(mfourPipEpt2, pcmd, sizeof(t_rjob_cmd));
+    ret = OPENAMP_send(amfrs, pcmd, sizeof(t_rjob_cmd));
     if (ret < 0) {
         log_err("Failed to send cmdmessage ret=%d \n", ret);
     }
@@ -143,7 +155,7 @@ int send_rjob_cmd(t_rjob_cmd *pcmd)
 //  wait_rjob_cmd
 //  blocking when cmd not reveived
 //*****************************************************************************
-void *wait_rjob_cmd(void)
+void *wait_rjob_cmd(int *pmfourPipEpt)
 {
     struct pollfd pllfd[2]={0};
     int pipRet=0, len=0, ret=0, txd=0;
@@ -151,7 +163,7 @@ void *wait_rjob_cmd(void)
     char *cinfo=0;
     t_rjob_cmd *rjcmd=0;
     
-    pllfd[0].fd = mfourPipEpt1[0];
+    pllfd[0].fd = pmfourPipEpt[0];
     pllfd[0].events = POLLIN;
 
     while (1) {
@@ -211,7 +223,7 @@ void *wait_rjob_cmd(void)
 //  wait_rjob_rsp
 //  blocking when cmd not reveived
 //*****************************************************************************
-void *wait_rjob1_rsp(void)
+void *wait_rjob1_rsp(int *pmfourPipEpt)
 {
     struct pollfd pllfd[2]={0};
     int pipRet=0, len=0, txd=0;
@@ -219,7 +231,7 @@ void *wait_rjob1_rsp(void)
     char *cinfo=0;
     t_rjob_cmd *rjcmd=0;
     
-    pllfd[0].fd = mfourPipEpt1[0];
+    pllfd[0].fd = pmfourPipEpt[0];
     pllfd[0].events = POLLIN;
 
     while (1) {
@@ -288,11 +300,11 @@ void remove_rjob1_rsp(void)
 //          it need to receive a command from A7 to update it to correct value
 //          otherwise OPENAMP_send() will fail
 //*****************************************************************************
-int send_rjob_rsp( t_rjob_cmd *rsp)
+int send_rjob_rsp( t_rjob_cmd *rsp, struct mfour_rs_t *amfrs)
 {
     int ret=0;
 
-    ret = OPENAMP_send(mfourPipEpt2, rsp, sizeof(t_rjob_cmd));
+    ret = OPENAMP_send(amfrs, rsp, sizeof(t_rjob_cmd));
     if (ret < 0) {
         log_err("Failed to send rspmessage ret=%d \n", ret);
     }
@@ -310,7 +322,7 @@ int send_rjob_rsp( t_rjob_cmd *rsp)
 }
 
 //request two image blocks first for every new page in
-void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
+void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd, struct mfour_rs_t *emfrs )
 {
     t_rjob_cmd Bkjobcmd;
     t_rjob_cmd *prsp;
@@ -328,7 +340,7 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
 
     dbg_rjob_cmd(&Bkjobcmd, sizeof(Bkjobcmd));
     
-    send_rjob_cmd(&Bkjobcmd);  //response to the Image_In command
+    send_rjob_cmd(&Bkjobcmd, emfrs);  //response to the Image_In command
 
     dbg_rjob_cmd(&Bkjobcmd, sizeof(Bkjobcmd));
     
@@ -339,7 +351,7 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
 //	img_task_status.area_idx = 0;
 //    img_task_status.image_idx++;
 
-	DstImageIP_Param=(t_ImageParam *)RJob_TX_ShareMem;
+	DstImageIP_Param=(t_ImageParam *)emfrs->RJob_TX_ShareMem;
     BKimage_param = (t_ImageParam *)pcmd->mPtr;
     
     log_dbg("%s send RSP line %d dst: 0x%.8x src: 0x%.8x \n", __func__, __LINE__, (unsigned int)DstImageIP_Param, (unsigned int)BKimage_param);
@@ -358,7 +370,7 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
     Bkjobcmd.dPtr 	= 0;
     Bkjobcmd.rsp 	= 0;
     Bkjobcmd.dSize 	= sizeof(t_ImageParam);
-    Bkjobcmd.mPtr 	= (void *)RJob_TX_ShareMem;
+    Bkjobcmd.mPtr 	= (void *)emfrs->RJob_TX_ShareMem;
 	
 /*    log_info("BKCMD_IMAGE_IN pImg=%X w=%d,h=%d TX=%X\r\n",
             (int)BKimage_param,BKimage_param->w, pImg->h ,
@@ -388,8 +400,8 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
 
        log_dbg("%s require line %d\n", __func__, __LINE__);
     
-	send_rjob_cmd( &Bkjobcmd );
-	prsp = wait_rjob1_rsp();
+	send_rjob_cmd(&Bkjobcmd, emfrs);
+	prsp = wait_rjob1_rsp(emfrs->mfourPipEpt1);
 	log_info("	rsp cmd = %4x\r\n",prsp->cmd);
 	remove_rjob1_rsp();
 	
@@ -456,7 +468,7 @@ void cmd_BKCMD_IMAGE_IN_handler( t_rjob_cmd *pcmd )
 
 
 //receive image data from A7
-void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
+void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd, struct mfour_rs_t *emfrs )
 {
     t_rjob_cmd *prsp;
     t_ImageParam *BkJobImg_Para, *DstImageIP_Param;
@@ -522,8 +534,8 @@ void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
 */
 	//	doneCmd.dSize = sizeof(t_ImageParam);
 	doneCmd.rsp = 0;
-	send_rjob_cmd( &doneCmd );
-    prsp = wait_rjob1_rsp();
+	send_rjob_cmd(&doneCmd, emfrs);
+    prsp = wait_rjob1_rsp(emfrs->mfourPipEpt1);
     log_info("  rsp cmd = %4x sent\n",prsp->cmd);
     remove_rjob1_rsp();
 
@@ -534,7 +546,7 @@ void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
 	{
 		if (BkJobImg_Para->iJobIdx >= NewAreaReq) //get new image block
 		{
-			DstImageIP_Param=(t_ImageParam *)RJob_TX_ShareMem;
+			DstImageIP_Param=(t_ImageParam *)emfrs->RJob_TX_ShareMem;
 			Duplicate_imageparam(BkJobImg_Para, DstImageIP_Param);
 			ReqImgCmd=*pcmd;
 			ReqImgCmd.tag	= 0x15;
@@ -542,10 +554,10 @@ void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
 			ReqImgCmd.dPtr	= 0;
 			ReqImgCmd.rsp	= 0;
 			ReqImgCmd.dSize	= sizeof(t_ImageParam);
-			ReqImgCmd.mPtr	= (void *)RJob_TX_ShareMem;
+			ReqImgCmd.mPtr	= (void *)emfrs->RJob_TX_ShareMem;
 					
-			send_rjob_cmd( &ReqImgCmd );
-			prsp = wait_rjob1_rsp();
+			send_rjob_cmd(&ReqImgCmd, emfrs);
+			prsp = wait_rjob1_rsp(emfrs->mfourPipEpt1);
 			log_info("	rsp cmd = %4x\r\n",prsp->cmd);
 			remove_rjob1_rsp();
 
@@ -560,7 +572,7 @@ void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
         doneCmd.dSize = 0;
         doneCmd.dPtr = NULL;
         doneCmd.mPtr = 0;
-        send_rjob_cmd( &doneCmd );
+        send_rjob_cmd(&doneCmd, emfrs);
 //		prsp = wait_rjob1_rsp();
 //		log_info("	rsp cmd = %4x\r\n",prsp->cmd);
 //		remove_rjob1_rsp();
@@ -570,7 +582,7 @@ void cmd_BKCMD_SEND_AREA_handler( t_rjob_cmd *pcmd )
 
 //this function can be called after processing the image and need to save the intermediate job for processing
 //
-void cmd_BKCMD_SVAE_PCAREA( t_rjob_cmd *SavePcmd )
+void cmd_BKCMD_SVAE_PCAREA(t_rjob_cmd *SavePcmd, struct mfour_rs_t *emfrs)
 {
     t_rjob_cmd *prsp;
     t_ImageParam *BkJobImg_Para, *DstImageIP_Param;
@@ -620,15 +632,15 @@ log_info("RetrieveImgSetYYYY= %x, %x, %x, %x, %x, %x, %x, %x\r\n",
 			*(TempPtr+1));
 *///	doneCmd.dSize = sizeof(t_ImageParam);
 	doneCmd.rsp = 0;
-	send_rjob_cmd( &doneCmd );
-    prsp = wait_rjob1_rsp();
+	send_rjob_cmd(&doneCmd, emfrs);
+    prsp = wait_rjob1_rsp(emfrs->mfourPipEpt1);
     log_info("  rspSaveDonecmd = %4x sent\n",prsp->cmd);
     remove_rjob1_rsp();
 	log_info("SaveiJobRtnCode = %x \r\n",BkJobImg_Para->iJobRtnCode);
 
 }
 
-
+/*
 void cmd10_handler( t_rjob_cmd *pcmd )
 {
     t_rjob_cmd rsp;
@@ -651,8 +663,9 @@ void cmd10_handler( t_rjob_cmd *pcmd )
 
     send_rjob_rsp( &rsp );
 }
+*/
 
-void cmd00_handler( t_rjob_cmd *pcmd )
+void cmd00_handler( t_rjob_cmd *pcmd, struct mfour_rs_t *emfrs )
 {
     t_rjob_cmd rsp;
 
@@ -664,11 +677,11 @@ void cmd00_handler( t_rjob_cmd *pcmd )
     rsp.dPtr = NULL;
     rsp.mPtr = 0;
     rsp.rsp = 0xFF;
-    send_rjob_rsp( &rsp );
-    send_rjob_rsp( &rsp );
-    send_rjob_rsp( &rsp );
-    send_rjob_rsp( &rsp );
-    send_rjob_rsp( &rsp );
+    send_rjob_rsp( &rsp, emfrs );
+    send_rjob_rsp( &rsp, emfrs );
+    send_rjob_rsp( &rsp, emfrs );
+    send_rjob_rsp( &rsp, emfrs );
+    send_rjob_rsp( &rsp, emfrs );
 }
 
 int m4_enter(int id) {
@@ -686,7 +699,7 @@ int m4_enter(int id) {
 //      or copy pcmd->dPtr data to another buffer
 //      otherwise data will corrupted
 //*****************************************************************************
-void cmd_dispatcher(t_rjob_cmd *pcmd)
+void cmd_dispatcher(t_rjob_cmd *pcmd, struct mfour_rs_t *cmfrs)
 {
 	log_info( "rjob cmd=%02X size=%d \n", pcmd->cmd, pcmd->dSize );
     //int len2 = (pcmd->dataSize<16) ? pcmd->dataSize : 16;
@@ -697,45 +710,52 @@ void cmd_dispatcher(t_rjob_cmd *pcmd)
     switch( cmd )
     {
         case  0:
-            cmd00_handler( pcmd );
+            cmd00_handler(pcmd, cmfrs);
             break;
         case  BKCMD_IMAGE_IN :		//receive when new page in
-            cmd_BKCMD_IMAGE_IN_handler( pcmd );
+            cmd_BKCMD_IMAGE_IN_handler( pcmd, cmfrs );
             break;
         case  BKCMD_SEND_AREA : //receive image dat from A7
-            cmd_BKCMD_SEND_AREA_handler( pcmd );
+            cmd_BKCMD_SEND_AREA_handler( pcmd, cmfrs );
             break;
     }
 
 }
 
-int mfourmaind(char *shmtx) 
+int mfourmaind(char *shmtx, int *pip1, int *pip2) 
 {
+    struct mfour_rs_t *mfrs=0;
+    
     t_rjob_cmd *pcmd=0;
 
-    log_info("%s ENTER line %d [0x%.8x]\n", __func__, __LINE__, RJob_TX_ShareMem);
+    //log_info("%s ENTER line %d [0x%.8x]\n", __func__, __LINE__, RJob_TX_ShareMem);
 
-    if (RJob_TX_ShareMem == 0) {
-        RJob_TX_ShareMem = malloc(64*1024);
-    }
+    mfrs = malloc(sizeof(struct mfour_rs_t));
+    memset(mfrs, 0x0, sizeof(struct mfour_rs_t));
 
-    if (!RJob_TX_ShareMem) return -1;
+    mfrs->RJob_TX_ShareMem = malloc(64*1024);
+    mfrs->RJob_TX_ShareMemDuo = shmtx;
+    memcpy(mfrs->mfourPipEpt1, pip1, sizeof(int) * 2);
+    memcpy(mfrs->mfourPipEpt2, pip2, sizeof(int) * 2);
+        
+    if (!mfrs->RJob_TX_ShareMem) return -1;
+    if (!mfrs->RJob_TX_ShareMemDuo) return -2;
 
-    if (RJob_TX_ShareMemDuo == 0) {
-        if (shmtx) {
-            RJob_TX_ShareMemDuo = shmtx;
-        }
-    }
+    //RJob_TX_ShareMem = mfrs->RJob_TX_ShareMem;
+    //RJob_TX_ShareMemDuo = mfrs->RJob_TX_ShareMemDuo;
+    //memcpy(mfourPipEpt1, mfrs->mfourPipEpt1, sizeof(int) * 2);
+    //memcpy(mfourPipEpt2, mfrs->mfourPipEpt2, sizeof(int) * 2);
 
-    if (!RJob_TX_ShareMemDuo) return -2;
+    while (1) {
 
-    pcmd = wait_rjob_cmd();
+        pcmd = wait_rjob_cmd(mfrs->mfourPipEpt1);
 
-    dbg_rjob_cmd(pcmd, sizeof(pcmd));
+        dbg_rjob_cmd(pcmd, sizeof(pcmd));
     
-    cmd_dispatcher(pcmd);
+        cmd_dispatcher(pcmd, mfrs);
 
-    free(pcmd);
+        free(pcmd);
+    }
     
     log_info("%s LEAVE line %d \n", __func__, __LINE__);    
     

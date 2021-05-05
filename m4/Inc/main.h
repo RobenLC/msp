@@ -152,11 +152,11 @@ extern unsigned int RJob_TX_ShareMem;
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 //void wait_rjob_cmd();
-int send_rjob_rsp( t_rjob_cmd *rsp );
-int send_rjob_cmd( t_rjob_cmd *pcmd );
-void *wait_rjob1_rsp();
+//int send_rjob_rsp( t_rjob_cmd *rsp );
+//int send_rjob_cmd( t_rjob_cmd *pcmd );
+//void *wait_rjob1_rsp();
 void remove_rjob1_rsp();
-void cmd_dispatcher( t_rjob_cmd *p_rjob_cmd );
+//void cmd_dispatcher( t_rjob_cmd *p_rjob_cmd );
 
 #ifdef __cplusplus
 }

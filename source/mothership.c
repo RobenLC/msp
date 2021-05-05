@@ -2123,8 +2123,7 @@ static inline char* getPixel(char *rawCpy, int dx, int dy, int rowsz, int bitset
 static int cfgTableGetChkDPI(struct aspConfig_s *table, int idx, uint32_t *rval, uint32_t stat);
 static int dbgRjobCmd(mfour_rjob_cmd *rjcmd, int len);
 #if MFOUR_API
-int mfourmaind(char *shmtx);
-int mfourSetPipEpt1(int *pip);
+int mfourmaind(char *shmtx, int *pip1, int *pip2);
 int mfourSetPipEpt2(int *pip);
 int m4_enter(int id);
 
@@ -94005,12 +94004,10 @@ static int p18(struct procRes_s *rs)
 
     prctl(PR_SET_NAME, "msp-p18");
 
-    mfourSetPipEpt1(pipMfTx);
-    mfourSetPipEpt2(pipMfRx);
+    //mfourSetPipEpt1(pipMfTx);
+    //mfourSetPipEpt2(pipMfRx);
     
-    while (1) {
-        mfourmaind(rs->pbMfTxBuff);        
-    }
+    mfourmaind(rs->pbMfTxBuff, pipMfTx, pipMfRx);
     
     p18_end(rs);
 

@@ -113,7 +113,7 @@ imageIP *RetrieveImgSetOrg (t_ImageParam *SrcBKJob_Param);	//should be removed l
 
 unsigned char SelNTDImageLayer(t_ImageLayers *ImgLayerInfo, unsigned char tBillNum);
 
-void cmd_BKCMD_SVAE_PCAREA( t_rjob_cmd *SavePcmd );
+//void cmd_BKCMD_SVAE_PCAREA( t_rjob_cmd *SavePcmd );
 
 
 
