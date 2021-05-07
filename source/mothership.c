@@ -39916,6 +39916,62 @@ static int p18_end(struct procRes_s *rs)
     return ret;
 }
 
+static int p19_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p19_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p20_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p20_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p21_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p21_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
+static int p22_init(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_init(rs);
+    return ret;
+}
+
+static int p22_end(struct procRes_s *rs)
+{
+    int ret;
+    ret = pn_end(rs);
+    return ret;
+}
+
 static int p5_init(struct procRes_s *rs, struct procRes_s *rcmd)
 {
     int ret=0;
@@ -94014,6 +94070,1906 @@ static int p18(struct procRes_s *rs)
     return 0;
 }
 #endif
+
+#define SAVE_DONE_IMG_D (0)
+#define LOG_P19_EN (0)
+static int p19(struct procRes_s *rs)
+{
+    char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
+    char devstr[] = "/dev/rjob0";
+    int *cutsides=0, *cutlayers=0;
+    char *bmpcolrtb=0, *ph=0, *bmprot=0, *bmpbuff=0, *bmpbufc=0, *bmpcpy=0, *metaPt=0, *exmeta=0, *buffmeta=0;
+    int ret=0, mfbidx=0, tcmd=0, mfbstat=0, colr=0, blen=0, bhlen=0, bdpp=0, val=0, bmpw=0, bmph=0, bdpi=0, tmp=0, err=0;
+    int prisec=0, cutcnt=0, cutnum=0, tmCost=0, rotlen=0, jpgLen, mreal[2]={0}, updn=0, lenbs=0, bmpmax=0;
+    int lastCylen=0, lrst=0, ix=0, uselen=0, rstlen=0, exmlen=0, exmax=0, bmtlen=0, bmtmax=0, imgidx=0, pipRet=0, mfcmd=0;
+    int cid=0, testcnt=0;
+    uint32_t fformat=0;
+    char ch=0, chm=0, cht=0;
+    unsigned char *jpgrlt=0;
+    char *rotsrc[8]={0}, *rotdst[8]={0};
+    int rotsmax[8]={0}, rotdmax[8]={0};
+    struct sdParseBuff_s *pabuff=0;
+    struct timespec jpgS, jpgE;
+    struct usbhost_s *pushost=0;
+    struct aspMetaData_s *metaRx = 0;
+    struct aspConfig_s *pct=0, *pdt=0;
+    struct bitmapHeader_s *bheader=0;
+    struct aspMetaDataviaUSB_s *ptmetausb=0;
+    struct bitmapDecodeItem_s *pdecroi=0, *penroi=0;
+    char pinfo[8]={0};
+    int *pipeMfRx=0, *pipeMfTx=0;
+    struct pollfd pllfd[2]={0};
+    int cropinfo[8]={0};
+
+    sprintf_f(rs->logs, "p19\n");
+    print_f(rs->plogs, "P19", rs->logs);
+
+    p19_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p19");
+
+    pct = rs->pcfgTable;
+    pabuff = &rs->psFat->parBuf;
+    rs->pbheader = malloc(sizeof(struct bitmapHeader_s));
+    bheader = rs->pbheader;
+    memset(bheader, 0, sizeof(struct bitmapHeader_s));
+    //ptmetausb = rs->pmetausb;
+
+    pushost = rs->pusbhost;
+    metaPt = pushost->puhsmeta;
+    metaRx = (struct aspMetaData_s *)metaPt;
+    
+    while (1) {
+        
+        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+
+        if (ret > 0) {
+            #if LOG_P19_EN
+            sprintf_f(rs->logs, "m4 get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P19", rs->logs);
+            #endif
+        } else {
+            //rs_ipc_put(rs, "h", 1);
+        
+            //sprintf_f(rs->logs, "host not available !!\n");
+            //print_f(rs->plogs, "P19", rs->logs);
+
+            continue;
+        }
+
+        tcmd = ch;
+
+        switch (tcmd) {
+        case '1':
+            pinfo[0] = '1';
+
+            testcnt = 0;
+            
+            rs_ipc_put(rs, pinfo, 1);
+            break;
+        case 'f':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+            
+                #if LOG_P19_EN
+                sprintf_f(rs->logs, "f get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P19", rs->logs);
+                #endif
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    break;
+                } else {
+                    //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    //print_f(rs->plogs, "P19", rs->logs);
+                }
+
+                imgidx = 0;
+                mfbstat = 0;
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P19", rs->logs);
+
+                //#if MFOUR_SIM_MODE_BMP
+                //ret = send_image_in_bmp(rs, mfbidx, (testcnt%4)+1);
+                //testcnt += 1;
+                //#endif // #if MFOUR_SIM_MODE_BMP
+                cht = 'F';
+                
+                if ((!ret) && (!mfbstat)) {
+                    pinfo[0] = 'F';
+                    pinfo[1] = ch;
+
+                    rs_ipc_put(rs, pinfo, 2);
+
+                    //ret = rs_ipc_get_ms(rs, &cht, 1, 5000);
+
+                    cht = 'k';
+                }
+                
+                sprintf_f(rs->logs, "f send, get back ch: %c \n", cht);
+                print_f(rs->plogs, "P19", rs->logs);
+                
+                if (cht == 'k') {                    
+
+                    pipeMfRx = rs->pbDecMfour[mfbidx]->aspPipeMfourRx;
+                    pipeMfTx = rs->pbDecMfour[mfbidx]->aspPipeMfourTx;
+
+                    pllfd[0].fd = pipeMfRx[0];
+                    pllfd[0].events = POLLIN;
+
+                    mfcmd = 0;
+                    
+                    while (1) {
+                        
+                        pipRet = poll(pllfd, 1, 500);
+                        if (pipRet > 0) {
+                            ret = read(pllfd[0].fd, &chm, 1);
+
+                            #if LOG_P19_EN
+                            sprintf_f(rs->logs, "m4crop get chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                            print_f(rs->plogs, "P19", rs->logs);
+                            #endif
+                        
+                            mfcmd = chm;
+                        
+                            switch (mfcmd) {
+                            //case BKCMD_IMAGE_IN:            // receive scanner cmd
+                            //    break;
+                            case 'C': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
+                                ret = read(pllfd[0].fd, &chm, 1);
+                                
+                                #if LOG_P19_EN
+                                sprintf_f(rs->logs, "C get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P19", rs->logs);
+                                #endif
+
+                                if (chm == 0x80) {
+                                    cid = 0;
+                                } else {
+                                    cid = chm & 0x7f;
+                                }
+
+                                if (cid > 3) {
+                                    sprintf_f(rs->logs, "get clip index %d error!!! \n", cid);
+                                    print_f(rs->plogs, "P19", rs->logs);
+                                    break;
+                                } else {
+                                    //sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    //print_f(rs->plogs, "P19", rs->logs);
+                                }
+                                
+                                pinfo[0] = 'b';
+                                pinfo[1] = chm;
+
+                                write(pipeMfTx[1], pinfo, 2);
+                                
+                                break;
+                            case 'c': //BKCMD_REQUIRE_AREA:        // receive M4-postman cmd
+                                ret = read(pllfd[0].fd, &chm, 1);
+                                
+                                #if LOG_P19_EN
+                                sprintf_f(rs->logs, "c get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P19", rs->logs);
+                                #endif
+
+                                if (chm == 0x80) {
+                                    cid = 0;
+                                } else {
+                                    cid = chm & 0x7f;
+                                }
+
+                                if (cid > 3) {
+                                    sprintf_f(rs->logs, "get clip index %d error!!! \n", cid);
+                                    print_f(rs->plogs, "P19", rs->logs);
+                                    break;
+                                } else {
+                                    //sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    //print_f(rs->plogs, "P19", rs->logs);
+                                }
+
+                                sprintf_f(rs->logs, "process current buff id: %d cid: %d \n", mfbidx, cid);
+                                print_f(rs->plogs, "P19", rs->logs);
+                
+                                ret = handle_cmd_require_areaR(rs, cid, mfbidx, 12);
+                                if (ret) {
+                                    sprintf_f(rs->logs, "Error!!! mfour require area failed ret: %d \n", ret);
+                                    print_f(rs->plogs, "P19", rs->logs);
+                                }
+                                
+                                break;
+                            case 'd': //BKCMD_DONE_AREA:           // receive M4-postman cmd
+                                ret = read(pllfd[0].fd, &chm, 1);
+
+                                #if LOG_P19_EN
+                                sprintf_f(rs->logs, "d get cont chm from mfour rx, chm: %c [0x%.2x]\n", chm, chm);
+                                print_f(rs->plogs, "P19", rs->logs);
+                                #endif
+
+                                if (chm == 0x80) {
+                                    cid = 0;
+                                } else {
+                                    cid = chm & 0x7f;
+                                }
+
+                                if (cid > 3) {
+                                    sprintf_f(rs->logs, "get clip index %d error!!! \n", cid);
+                                    print_f(rs->plogs, "P19", rs->logs);
+                                    break;
+                                } else {
+                                    //sprintf_f(rs->logs, "get clip index %d succed!!! \n", cid);
+                                    //print_f(rs->plogs, "P19", rs->logs);
+                                }
+
+                                #if SAVE_DONE_IMG_D
+                                ret = save_done_area(rs, cid, mfbidx);
+                                if (ret) {
+                                    sprintf_f(rs->logs, "Error!!! mfour save done area failed ret: %d \n", ret);
+                                    print_f(rs->plogs, "P19", rs->logs);
+                                }
+                                #endif
+                                break;
+                            case 'e': //BKCMD_IMAGE_COMPLETE :     // M4 -> operator
+                                //g_done_image_idx++;
+                                //bkjob_send_cmd( chan->mqWaiter, &cmd );
+                                //free(image_param);
+                                pinfo[0] = 'e';
+
+                                write(pipeMfTx[1], pinfo, 1);
+
+                                #if LOG_P19_EN
+                                sprintf_f(rs->logs, "end image idx: %d \n", mfbidx);
+                                print_f(rs->plogs, "P19", rs->logs);
+                                #endif
+                                
+                                break;
+                            default:
+                                break;
+                            }
+                        }
+                        else {
+                            sprintf_f(rs->logs, "wait mfour rx coming...\n");
+                            print_f(rs->plogs, "P19", rs->logs);
+                        }
+
+                        if (mfcmd == 'e') {
+                            break;
+                        }
+                    }
+                    
+                }
+                else {
+                    sprintf_f(rs->logs, "bypass m4 image!!! ret: %d, cswerr: 0x%.2x return ch: %c \n", ret, mfbstat, ch);
+                    print_f(rs->plogs, "P19", rs->logs);                
+                }
+
+                pinfo[0] = 'R';
+                pinfo[1] = ch;
+                rs_ipc_put(rs, pinfo, 2);
+            }
+
+            
+            break;
+        case 's':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                sprintf_f(rs->logs, "get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P19", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P19", rs->logs);
+                }
+
+                imgidx = 0;
+                mfbstat = 0;
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                if (mfbstat == 0) {
+                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x error!!! \n", mfbidx, imgidx, mfbstat);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    //break;
+                } else {
+                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                    print_f(rs->plogs, "P19", rs->logs);
+                }
+
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecRaw, &bmpbuff, &uselen);
+                if (ret < 0) {
+                    bmpbuff = 0;
+                    bmpmax = 0;
+                    uselen = 0;
+                } else {
+                    bmpmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecRaw);
+                }
+
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMeta, &buffmeta, &bmtlen);
+                if (ret < 0) {
+                    buffmeta = 0;
+                    bmtmax = 0;
+                    bmtlen = 0;
+                } else {
+                    bmtmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMeta);
+                }
+                
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMetaex, &exmeta, &exmlen);
+                if (ret < 0) {
+                    exmeta = 0;
+                    exmax = 0;
+                    exmlen = 0;
+                } else {
+                    exmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMetaex);
+                }
+
+                rstlen = uselen % 512;
+                //sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                //print_f(rs->plogs, "P19", rs->logs);
+
+                //shmem_dump(buffmeta, bmtlen);
+                
+                ptmetausb = (struct aspMetaDataviaUSB_s *)buffmeta;
+                
+                //dbgMetaUsb(ptmetausb);
+
+                /*
+                val=0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+                print_f(rs->plogs, "P19", rs->logs);
+                */
+                bmph = (ptmetausb->IMG_HIGH[1] << 8) | ptmetausb->IMG_HIGH[0];
+
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                switch (val) {
+                case COLOR_MODE_COLOR:
+                    colr = 24;
+                    break;
+                case COLOR_MODE_GRAY:
+                case COLOR_MODE_GRAY_DETAIL:
+                case COLOR_MODE_BLACKWHITE:
+                    colr = 8;
+                    break;
+                default:
+                    colr = 24;
+                    break;
+                }
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, "P19", rs->logs);
+            
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+
+                ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                tmp = val << 8 | tmp;
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                
+                bmpw = scanWidthConvert(tmp, val);
+                bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
+                
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, "P19", rs->logs);
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);   
+                bdpi = tmp;
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, "P19", rs->logs);
+                
+                bmpcolrtb = aspMemalloc(1078, 12);
+                if (!bmpcolrtb) {
+                    sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                    print_f(rs->plogs, "P19", rs->logs);                                
+                }
+
+                if (colr == 8) {
+                    blen = 1078;
+                    bdpp = 1;
+                } else if (colr == 24) {
+                    blen = 54;            
+                    bdpp = 3;
+                } else {
+                    sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                    print_f(rs->plogs, "P19", rs->logs);   
+                }
+                
+                bhlen = blen;
+                val = ((bmpw * colr + 31) / 32) * 4;
+                val = val * bmph; 
+
+                sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                print_f(rs->plogs, "P19", rs->logs);
+
+                bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+
+                ph = &bheader->aspbmpMagic[2];
+                val = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(bmpcolrtb, ph, val);
+
+                blen -= val;
+                if (blen > 0) {
+                    bitmapColorTableSetup(bmpcolrtb+val);
+                    blen -= 1024;
+                }
+
+                if (blen) {
+                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                    print_f(rs->plogs, "P19", rs->logs);
+                }
+                
+                prisec = ptmetausb->PRI_O_SEC;
+                if (prisec > 1) {
+                    sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
+                    print_f(rs->plogs, "P19", rs->logs);
+
+                    prisec = 0;
+                }
+                
+                cutcnt =0;
+                cutnum = msb2lsb16(&metaRx->BKNA_NUM);
+
+                cutsides = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                memset(cutsides, 0, cutnum*sizeof(int)*2);
+                cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                memset(cutlayers, 0, cutnum*sizeof(int)*2);
+                ret = 0;
+                
+                ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
+                sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
+                print_f(rs->plogs, "P19", rs->logs);
+                
+
+                pinfo[0] = 'S';
+                pinfo[1] = ch;
+
+                rs_ipc_put(rs, pinfo, 2);
+            }  
+            break;
+        case 'r':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                sprintf_f(rs->logs, "get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P19", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P19", rs->logs);
+                }
+
+                imgidx = 0;
+                mfbstat = 0;
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                if (mfbstat == 0) {
+                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x error!!! \n", mfbidx, imgidx, mfbstat);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    //break;
+                } else {
+                    sprintf_f(rs->logs, "get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                    print_f(rs->plogs, "P19", rs->logs);
+                }
+
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecRaw, &bmpbuff, &uselen);
+                if (ret < 0) {
+                    bmpbuff = 0;
+                    bmpmax = 0;
+                    uselen = 0;
+                } else {
+                    bmpmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecRaw);
+                }
+
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMeta, &buffmeta, &bmtlen);
+                if (ret < 0) {
+                    buffmeta = 0;
+                    bmtmax = 0;
+                    bmtlen = 0;
+                } else {
+                    bmtmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMeta);
+                }
+                
+                ret = aspBMPdecodeItemGet(&rs->pbDecMfour[mfbidx]->aspDecMetaex, &exmeta, &exmlen);
+                if (ret < 0) {
+                    exmeta = 0;
+                    exmax = 0;
+                    exmlen = 0;
+                } else {
+                    exmax = aspBMPdecodeItemMax(&rs->pbDecMfour[mfbidx]->aspDecMetaex);
+                }
+
+                rstlen = uselen % 512;
+                //sprintf_f(rs->logs, "get raw len: %d max: %d get meta len: %d max: %d get extra meta len: %d max: %d restlen: %d \n", uselen, bmpmax, bmtlen, bmtmax, exmlen, exmax, rstlen);
+                //print_f(rs->plogs, "P19", rs->logs);
+
+                //shmem_dump(buffmeta, bmtlen);
+                
+                ptmetausb = (struct aspMetaDataviaUSB_s *)buffmeta;
+                
+                //dbgMetaUsb(ptmetausb);
+
+                /*
+                val=0;
+                ret = cfgTableGetChk(pct, ASPOP_IMG_LEN, &val, ASPOP_STA_APP);    
+                sprintf_f(rs->logs, "[BMP] image length: %d \n", val);
+                print_f(rs->plogs, "P19", rs->logs);
+                */
+                bmph = (ptmetausb->IMG_HIGH[1] << 8) | ptmetausb->IMG_HIGH[0];
+
+                ret = cfgTableGetChk(pct, ASPOP_COLOR_MODE, &val, ASPOP_STA_APP);    
+                switch (val) {
+                case COLOR_MODE_COLOR:
+                    colr = 24;
+                    break;
+                case COLOR_MODE_GRAY:
+                case COLOR_MODE_GRAY_DETAIL:
+                case COLOR_MODE_BLACKWHITE:
+                    colr = 8;
+                    break;
+                default:
+                    colr = 24;
+                    break;
+                }
+                //sprintf_f(rs->logs, "[BMP] color mode: %d, ret: %d, bpp: %d \n", val, ret, colr);
+                //print_f(rs->plogs, "P19", rs->logs);
+            
+                ret = cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_H, &val, ASPOP_STA_APP);    
+
+                ret |= cfgTableGetChk(pct, ASPOP_WIDTH_ADJ_L, &tmp, ASPOP_STA_APP);    
+                tmp = val << 8 | tmp;
+
+                val = 0;
+                ret = cfgTableGetChk(pct, ASPOP_SCAN_WIDTH, &val, ASPOP_STA_UPD);
+                
+                bmpw = scanWidthConvert(tmp, val);
+                bmpw = (ptmetausb->IMG_WIDTH[1] << 8) | ptmetausb->IMG_WIDTH[0];
+                
+                //sprintf_f(rs->logs, "[BMP] defined width: %d, scan width = %d result width: %d \n", tmp, val, bmpw);
+                //print_f(rs->plogs, "P19", rs->logs);
+
+                tmp = 0;
+                ret = cfgTableGetChkDPI(pct, ASPOP_RESOLUTION, &tmp, ASPOP_STA_APP);    
+                bdpi = tmp;
+                //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
+                //print_f(rs->plogs, "P19", rs->logs);
+                
+                bmpcolrtb = aspMemalloc(1078, 12);
+                if (!bmpcolrtb) {
+                    sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
+                    print_f(rs->plogs, "P19", rs->logs);                                
+                }
+
+                if (colr == 8) {
+                    blen = 1078;
+                    bdpp = 1;
+                } else if (colr == 24) {
+                    blen = 54;            
+                    bdpp = 3;
+                } else {
+                    sprintf_f(rs->logs, "[BMP] error!!! unknown color bits: %d \n", colr);
+                    print_f(rs->plogs, "P19", rs->logs);   
+                }
+                
+                bhlen = blen;
+                val = ((bmpw * colr + 31) / 32) * 4;
+                val = val * bmph; 
+
+                sprintf_f(rs->logs, "[BMP] bitmap info color: %d, w: %d, h: %d, dpi: %d, raw size: %d, header size: %d\n", colr, bmpw, bmph, bdpi, val, blen);
+                print_f(rs->plogs, "P19", rs->logs);
+
+                bitmapHeaderSetup(bheader, colr, bmpw, bmph, bdpi, val);
+
+                ph = &bheader->aspbmpMagic[2];
+                val = sizeof(struct bitmapHeader_s) - 2;
+                memcpy(bmpcolrtb, ph, val);
+
+                blen -= val;
+                if (blen > 0) {
+                    bitmapColorTableSetup(bmpcolrtb+val);
+                    blen -= 1024;
+                }
+
+                if (blen) {
+                    sprintf_f(rs->logs, "[BMP] Error!!! the bitmap header's len is wrong %d\n", bhlen);
+                    print_f(rs->plogs, "P19", rs->logs);
+                }
+                
+                prisec = ptmetausb->PRI_O_SEC;
+                if (prisec > 1) {
+                    sprintf_f(rs->logs, "Error !! the pri sec is wrong !!! val: %d \n", prisec);
+                    print_f(rs->plogs, "P19", rs->logs);
+
+                    prisec = 0;
+                }
+                
+                cutcnt =0;
+                cutnum = msb2lsb16(&metaRx->BKNA_NUM);
+
+                cutsides = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                memset(cutsides, 0, cutnum*sizeof(int)*2);
+                cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                memset(cutlayers, 0, cutnum*sizeof(int)*2);
+                ret = 0;
+                
+                ret = aspMetaGetPages(metaRx, cutsides, cutlayers, cutnum);
+                sprintf_f(rs->logs, "[CUT] get page ret: %d num: %d\n", ret, cutnum);
+                print_f(rs->plogs, "P19", rs->logs);
+
+                #if 1
+                cutsides[ret*2] = -1;
+                cutsides[ret*2+1] = -1;
+                cutlayers[ret*2] = 0;
+                cutlayers[ret*2+1] = 0;
+                
+                ret += 1;
+                
+                cutsides[ret*2] = -2;
+                cutsides[ret*2+1] = -2;
+                cutlayers[ret*2] = 0;
+                cutlayers[ret*2+1] = 0;
+                
+                ret += 1;
+                #endif
+
+                cutnum = ret;
+
+                for (ix=0; ix < cutnum; ix++) {
+
+                    sprintf_f(rs->logs, "[CUT] clips %d. A:%d (%d) B:%d (%d)\n", ix, cutsides[ix*2], cutlayers[ix*2], cutsides[ix*2+1], cutlayers[ix*2+1]);
+                    print_f(rs->plogs, "P19", rs->logs);
+
+                }
+
+                if (cutnum > BMP_DECODE_PIC_SIZE) {
+                    cutnum = BMP_DECODE_PIC_SIZE;
+                }
+                
+                for (ix=0; ix < cutnum; ix++) {
+
+                    pdecroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                    penroi = &rs->pbDecMfour[mfbidx]->aspDecMfPiJpg[ix];
+
+                    ret = aspBMPdecodeItemGet(pdecroi, &rotsrc[ix], 0);
+                    if (ret < 0) {
+                        rotsrc[ix] = 0;
+                        rotsmax[ix] = 0;
+                    } else {
+                        rotsmax[ix] = aspBMPdecodeItemMax(pdecroi);
+                    }
+                    
+                    sprintf_f(rs->logs, "[BUFF] %d. src addr: 0x.8%x (max:%d) rotate dst addr:0x%.8x (max:%d)\n", ix, (uint32_t)bmpbuff, bmpmax, (uint32_t)rotsrc[ix], rotsmax[ix]);
+                    print_f(rs->plogs, "P19", rs->logs);
+
+                }
+
+                mreal[0] = -1;
+                mreal[1] = -1;
+                
+                while (cutcnt < cutnum) {
+
+                    bmprot = rotsrc[cutcnt];
+
+                    jpgLen = 0;
+                    rotlen = 0;
+
+                    if (!bmph) {
+                        break;
+                    }
+
+                    memcpy(ph, bmpcolrtb, 54);
+                    
+                    sprintf_f(rs->logs, "[BMP] doEncode %d. pri or sec: %d (%d, %d) \n", cutcnt, prisec, mreal[0], mreal[1]);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    
+                    clock_gettime(CLOCK_REALTIME, &jpgS);
+                    
+                    ret = rotateBMPMf(bmprot, bmpcolrtb, cropinfo, bmpbuff, mreal, 0xa5, 12);
+                    
+                    clock_gettime(CLOCK_REALTIME, &jpgE);
+                    
+                    sprintf_f(rs->logs, "[BMP] rotate bmp w: %d h: %d rawoffset: %d ret: %d\n", bheader->aspbiWidth, bheader->aspbiHeight, bheader->aspbhRawoffset, ret);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    
+                    tmCost = time_diff(&jpgS, &jpgE, 1000000);
+                    sprintf_f(rs->logs, "[BMP] rotate bmp cost: %d ms\n", tmCost);
+                    print_f(rs->plogs, "P19", rs->logs);
+                    
+                    bmpbufc = pabuff->dirParseBuff;   
+                    rotlen = pabuff->dirBuffUsed;
+                    
+                    aspBMPdecodeItemSet(&rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[cutcnt], bheader->aspbiWidth, bheader->aspbiHeight, rotlen);
+                    
+                    cutcnt ++;
+                    
+                }
+
+                pinfo[0] = 'R';
+                pinfo[1] = ch;
+
+                rs_ipc_put(rs, pinfo, 2);
+            }        
+            break;
+        default:
+            sprintf_f(rs->logs, "Error !!! unknown tcmd: 0x%x !!! \n", tcmd);
+            print_f(rs->plogs, "P19", rs->logs);
+
+            break;
+        }
+
+        aspMemClear(aspMemAsign, asptotMalloc, 12);
+    }
+
+    p19_end(rs);
+    
+    return 0;
+}
+
+#define LOG_P20_EN (1)
+static int p20(struct procRes_s *rs)
+{
+    int ret=0, tcmd=0, errcnt=0, pipRet=0, mfcmd=0;
+    int rj0id=0, mfbidx=0, imgidx=0, mfbstat=0, clipidx=0;
+    char ch=0, chm=0;
+    //char m4startcmd[256]="/usr/local/projects/BKJob_1/fw_cortex_m4.sh start";
+    //char m4startcmd[256]="/home/root/fw_cortex_m4.sh start";
+    struct bitmapDecodeItem_s *decraw=0, *decrect=0;
+    mfour_image_param_st *img_param=0;
+    mfour_rjob_cmd rjcmd;
+    struct pollfd pllfd[2]={0};
+    int *pipeMfCom=0, *pipeMfTx=0;
+    int tmCost=0;
+    
+    sprintf_f(rs->logs, "p20\n");
+    print_f(rs->plogs, "P20", rs->logs);
+
+    p20_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p20");
+    
+    memset(&rjcmd, 0, sizeof(mfour_rjob_cmd));
+
+    //sprintf(m4startcmd, "ls /dev | grep rjob");
+    //ret = doSystemCmd(m4startcmd);
+
+    #if MFOUR_API
+    m4_enter(1105);
+    #endif
+
+    #if !MFOUR_API
+    while (rj0id <= 0) {
+        usleep(100000);
+        rj0id = open("/dev/rjob0", O_RDWR);
+        
+        sprintf_f(rs->logs, "get m4 rjob 0 id: %d, sizeof: %d %d \n", rj0id, sizeof(rjcmd), sizeof(mfour_rjob_cmd));
+        print_f(rs->plogs, "P20", rs->logs);
+
+        errcnt++;
+    }
+    #endif
+    
+    while (1) {
+        ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+
+        if (ret > 0) {
+            //sprintf_f(rs->logs, "m4t get ch[0x%.2x] \n", ch);
+            //print_f(rs->plogs, "P20", rs->logs);
+        } else {
+            //sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
+            //print_f(rs->plogs, "P20", rs->logs);
+
+            continue;
+        }
+
+        tcmd = ch;
+
+        switch (tcmd) {
+        case 'k':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                //sprintf_f(rs->logs, "rjob0 get cont ch[0x%.2x] \n", ch);
+                //print_f(rs->plogs, "P20", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "to end get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P20", rs->logs);
+                    break;
+                } else {
+                    //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    //print_f(rs->plogs, "P20", rs->logs);
+                }
+
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "to end m4 tx get mfbuff index %d, imgindex: %d, status 0x%x succeed, do nothing!!\n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P20", rs->logs);
+                
+            }
+            break;
+        case 'a':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 5000);
+            if (ret > 0) {
+                //sprintf_f(rs->logs, "rjob0 get cont ch[0x%.2x] \n", ch);
+                //print_f(rs->plogs, "P20", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P20", rs->logs);
+                    break;
+                } else {
+                    //sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    //print_f(rs->plogs, "P20", rs->logs);
+                }
+
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "m4 tx get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P20", rs->logs);
+
+                decraw = &rs->pbDecMfour[mfbidx]->aspDecRaw;
+                img_param = decraw->aspDcData;
+
+                memset((char *)&rjcmd, 0, sizeof(mfour_rjob_cmd));
+                
+                rjcmd.cmd = BKCMD_IMAGE_IN;
+                rjcmd.tag = (mfbidx+1) << 16;
+                rjcmd.rsp = 0;
+                rjcmd.dPtr = &img_param->mfourAttb;
+                rjcmd.dSize = (decraw->aspDcLen > 16 * 1024) ? 16*1024:decraw->aspDcLen;
+
+                #if MFOUR_API
+                rjcmd.mPtr = rs->pbMfRxBuff;
+                #endif
+
+                sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_IMAGE_IN \n");
+                print_f(rs->plogs, "P20", rs->logs);
+                
+                //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                
+                clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+
+                sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_IMAGE_IN)_IN__", mfbidx); 
+                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                                
+                RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+
+                sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_IMAGE_IN)_OUT__", mfbidx); 
+                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+
+                clock_gettime(CLOCK_REALTIME, rs->rtpTo[1]);
+                clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                msync(rs->tm2[0], sizeof(struct timespec), MS_SYNC);
+
+                tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_IMAGE_IN) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                print_f(rs->plogs, "P20", rs->logs);    
+                            
+                pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
+                pipeMfTx = rs->pbDecMfour[mfbidx]->aspPipeMfourTx;
+
+                pllfd[0].fd = pipeMfTx[0];
+                pllfd[0].events = POLLIN;
+
+                while (1) {
+                    mfcmd = 0;
+                    pipRet = poll(pllfd, 1, 500);
+                    if (pipRet > 0) {
+                        ret = read(pllfd[0].fd, &chm, 1);
+                        //sprintf_f(rs->logs, "m4tx get chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                        //print_f(rs->plogs, "P20", rs->logs);
+
+                        mfcmd = chm;
+                        
+                        clock_gettime(CLOCK_REALTIME, rs->rtpTo[0]);
+                        msync(rs->rtpTo[0], sizeof(struct timespec), MS_SYNC);
+                        
+                        tmCost = time_diff(rs->rtpBk[1], rs->rtpTo[0], 1000);
+                        sprintf_f(rs->logs, "rjob round trip to (cost: %d.%d ms) [%c]\n", tmCost/1000, tmCost%1000, mfcmd);
+                        print_f(rs->plogs, "P20", rs->logs);    
+                    
+                        switch (mfcmd) {
+                        case 'b':
+                            ret = read(pllfd[0].fd, &chm, 1);
+                            //sprintf_f(rs->logs, "get cont chm: %c [0x%.2x] for m4tx\n", chm, chm);
+                            //print_f(rs->plogs, "P20", rs->logs);
+
+                            if (chm == 0x80) {
+                                clipidx = 0;
+                            } else {
+                                clipidx = chm & 0x7f;
+                            }
+
+                            if (clipidx > 3) {
+                                sprintf_f(rs->logs, "get clip index %d error!!! \n", clipidx);
+                                print_f(rs->plogs, "P20", rs->logs);
+                                break;
+                            } else {
+                                ///sprintf_f(rs->logs, "get clip index %d succed!!! \n", clipidx);
+                                //print_f(rs->plogs, "P20", rs->logs);
+                            }
+
+                            decrect = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[clipidx];
+                            img_param = decrect->aspDcData;
+                            
+                            //sprintf_f(rs->logs, "aspDecMfPiRaw info id: %d w: %d h: %d len: %d\n", clipidx, decrect->aspDcWidth, decrect->aspDcHeight, decrect->aspDcLen);
+                            //print_f(rs->plogs, "P20", rs->logs);
+
+                            memset((char *)&rjcmd, 0, sizeof(mfour_rjob_cmd));
+                            
+                            rjcmd.cmd = BKCMD_SEND_AREA;
+                            rjcmd.tag = (mfbidx+1) << 16;
+                            rjcmd.rsp = 0;
+                            rjcmd.dPtr = &img_param->mfourAttb;
+                            rjcmd.dSize = decrect->aspDcLen;
+                            #if MFOUR_API
+                            rjcmd.mPtr = rs->pbMfRxBuff;
+                            #endif
+
+                            sprintf_f(rs->logs, "ocr img_param info w: %d h: %d id: %d totalayer: %d\n", img_param->mfourAttb.ImageRect.xc, img_param->mfourAttb.ImageRect.yr, img_param->mfourAttb.iJobIdx, img_param->mfourAttb.ImageLayerInfo.BKNote_Layers);
+                            print_f(rs->plogs, "P20", rs->logs);
+
+                            //dbgRjobCmd(&rjcmd, sizeof(mfour_rjob_cmd));
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_SEND_AREA)_IN__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                
+                            RJOB_IOCT_WT_CMD(rj0id, &rjcmd);
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_SEND_AREA)_OUT__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                            tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                            sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_SEND_AREA) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P20", rs->logs);    
+                            
+                            break;
+                        case 'e':
+                            //sprintf_f(rs->logs, "complete \n");
+                            //print_f(rs->plogs, "P20", rs->logs);
+                            break;
+                        default:
+                            sprintf_f(rs->logs, "Error m4tx get[0x%.2x] unknown command !!!\n", mfcmd);
+                            print_f(rs->plogs, "P20", rs->logs);
+                            break;
+                        }
+
+                        clock_gettime(CLOCK_REALTIME, rs->rtpTo[1]);
+                        msync(rs->rtpTo[1], sizeof(struct timespec), MS_SYNC);
+                        
+                        tmCost = time_diff(rs->rtpTo[0], rs->rtpTo[1], 1000);
+                        sprintf_f(rs->logs, "rjob round trip to delay (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                        print_f(rs->plogs, "P20", rs->logs);    
+                        
+                    }
+                    else {
+                        sprintf_f(rs->logs, "waiting command for tx to m4... \n");
+                        print_f(rs->plogs, "P20", rs->logs);
+                    }
+
+                    if (mfcmd == 'e') {
+                        break;
+                    }
+
+                }
+                
+            }
+            break;
+        default:
+            sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", tcmd);
+            print_f(rs->plogs, "P20", rs->logs);    
+            break;
+        }
+    }
+    
+    p20_end(rs);
+
+    return 0;
+}
+
+#define DUMP_MFOUR_BMP_D (0)
+#define LOG_P21_EN (0)
+static int p21(struct procRes_s *rs)
+{
+#define MFOUR_WAIT_LIST_SIZE (8)
+    int ret=0, tcmd=0, errcnt=0, mfbidx=0, imgidx=0, mfbstat=0, cid=0, imgsize=0, jid=0, seqid=0, m4id=0;
+    int ix=0, ic=0, mfourCnt=2, mfourwait=0, mfourhead=0, mfourtail=0, m4dst=0;
+    char mfourlist[MFOUR_WAIT_LIST_SIZE];
+    char ch=0;
+    int rj1id=0;
+    char m4startcmd[256] = "ls";
+    char *rx_buf=0;
+    mfour_rect_st *pRect=0, *pArRect=0;
+    struct bitmapDecodeItem_s *decpic=0, *decraw=0, *decmeta=0;
+    struct aspMetaDataviaUSB_s *pusbmeta=0;
+    mfour_image_param_st *img_param=0, *img_out=0, *img_raw=0, *img_rxbuf=0;
+    mfour_areas_st *pArea=0;
+    t_ImageParam *pImgArea=0, *pImgOutArea=0;
+    mfour_rjob_cmd  outcmd, rspcmd;
+    char minfo[8]={0};
+    struct pollfd pllfd[2]={0};
+    int *pipeMfCom=0, *pipeMfRx=0;
+    char *cpyDst=0, *cpySrc=0;
+    int *ptrw=0, *ptrh=0;
+    struct bitmapHeader_s *pheader=0;
+    int mtlen=0;
+    char *bmpmeta=0;
+    char outchr[3][36]={0};
+    struct timespec mfoS, mfoE;
+    int tmCost=0;
+
+    //clock_gettime(CLOCK_REALTIME, &mfoE);
+    //tmCost = time_diff(&mfoS, &mfoE, 1000000);
+    
+    #if DUMP_MFOUR_BMP_D
+    static char ptfileSave[] = "/home/root/banknote/rotate/m4_%.3d_%.1d_%.1d.bmp";
+    char filepath[256]={0};
+    FILE *fdump=0;
+    int dumpsize=0;
+    char *dumpsrc=0;
+
+    char *ocrpath=0;
+    char filepathOcr[256]={0};
+    char filepathOcrTxt[256]={0};
+    FILE *focrtxt=0;
+    int trimsize=0, modix=0, outstrlen=0;
+    #endif
+    
+    sprintf_f(rs->logs, "p21\n");
+    print_f(rs->plogs, "P21", rs->logs);
+
+    p21_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p21");
+
+    memset(&outcmd, 0, sizeof(mfour_rjob_cmd));
+    memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+    
+    rx_buf = malloc(RJOB_RX_BLOCK_SIZE+sizeof(mfour_image_param_st));
+    
+    img_rxbuf = (mfour_image_param_st *)rx_buf;
+    
+    sprintf_f(rs->logs, "memory allocate succeed addr: 0x%.8x size: %d \n", (uint32_t)rx_buf, RJOB_RX_BLOCK_SIZE/1024);
+    print_f(rs->plogs, "P21", rs->logs);
+    
+    #if !MFOUR_API
+    while (rj1id <= 0) {
+        usleep(100000);
+        rj1id = open("/dev/rjob1", O_RDWR);
+        sprintf_f(rs->logs, "get m4 rjob 1 id: %d - %d\n", rj1id, errcnt);
+        print_f(rs->plogs, "P21", rs->logs);
+
+        errcnt++;
+    }
+    #endif
+
+    while (1) {
+        ret = rs_ipc_get_ms(rs, &ch, 1, 1000);
+
+        if (ret > 0) {
+            #if LOG_P21_EN
+            sprintf_f(rs->logs, "m4r get ch[0x%.2x] \n", ch);
+            print_f(rs->plogs, "P21", rs->logs);
+            #endif
+        } else {
+            #if LOG_P21_EN
+            sprintf_f(rs->logs, "loop!!! waitting cmd !!!\n");
+            print_f(rs->plogs, "P21", rs->logs);
+            #endif
+            continue;
+        }
+
+        tcmd = ch;
+
+        switch (tcmd) {
+        case 'k':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 1000);
+            if (ret <= 0) {
+                sprintf_f(rs->logs, "rjob1 waitting cont ch \n");
+                print_f(rs->plogs, "P21", rs->logs);
+            } else {   //if (ret > 0) {
+                sprintf_f(rs->logs, "rjob1 get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P21", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P21", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P21", rs->logs);
+                }
+                
+                decmeta = &rs->pbDecMfour[mfbidx]->aspDecMeta;
+                aspBMPdecodeItemGet(decmeta, &bmpmeta, &mtlen);
+                pusbmeta = (struct aspMetaDataviaUSB_s *)bmpmeta;
+    
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "ending m4 rx get mfbuff index %d, imgindex: %d, status 0x%x succeed, do nothing \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P21", rs->logs);
+
+                pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
+                pipeMfRx = rs->pbDecMfour[mfbidx]->aspPipeMfourRx;
+
+                minfo[0] = 'e';
+                write(pipeMfRx[1], minfo, 1);                
+                
+            }
+            break;
+        case 'i':
+            ret = rs_ipc_get_ms(rs, &ch, 1, 1000);
+            if (ret <= 0) {
+                sprintf_f(rs->logs, "rjob1 waitting cont ch \n");
+                print_f(rs->plogs, "P21", rs->logs);
+            } else {   //if (ret > 0) {
+                sprintf_f(rs->logs, "rjob1 get cont ch[0x%.2x] \n", ch);
+                print_f(rs->plogs, "P21", rs->logs);
+
+                if (ch == 0x80) {
+                    mfbidx = 0;
+                } else {
+                    mfbidx = ch & 0x7f;
+                }
+
+                if (mfbidx > 3) {
+                    sprintf_f(rs->logs, "get buff index %d error!!! \n", mfbidx);
+                    print_f(rs->plogs, "P21", rs->logs);
+                    break;
+                } else {
+                    sprintf_f(rs->logs, "get buff index %d succed!!! \n", mfbidx);
+                    print_f(rs->plogs, "P21", rs->logs);
+                }
+                
+                decmeta = &rs->pbDecMfour[mfbidx]->aspDecMeta;
+                aspBMPdecodeItemGet(decmeta, &bmpmeta, &mtlen);
+                pusbmeta = (struct aspMetaDataviaUSB_s *)bmpmeta;
+    
+                ret = aspBMPdecodeBuffGetIdx(rs->pbDecMfour[mfbidx], &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(rs->pbDecMfour[mfbidx], &mfbstat);
+                sprintf_f(rs->logs, "m4 rx get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mfbidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P21", rs->logs);
+
+                pipeMfCom = rs->pbDecMfour[mfbidx]->aspPipeMfourCom;
+                pipeMfRx = rs->pbDecMfour[mfbidx]->aspPipeMfourRx;
+
+                mfourCnt=1;
+                mfourwait=0;
+                mfourhead=0;
+                mfourtail=0;
+                
+                while (1) {
+                
+                    outcmd.dSize = RJOB_RX_BLOCK_SIZE;
+                    outcmd.dPtr  = &img_rxbuf->mfourAttb;
+                    
+                    ret = RJOB_IOCT_RD_CMD(rj1id, (unsigned long)&outcmd);
+                    if (ret <0) {
+                        sprintf_f(rs->logs, "Error!!! read rjob command ret: %d !!!\n", ret);
+                        print_f(rs->plogs, "P21", rs->logs);    
+                        continue;
+                    }
+                    
+                    //sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
+                    //print_f(rs->plogs, "P21", rs->logs);
+
+                    clock_gettime(CLOCK_REALTIME, rs->rtpBk[0]);
+                    msync(rs->rtpBk[0], sizeof(struct timespec), MS_SYNC);
+                    
+                    tmCost = time_diff(rs->rtpTo[1], rs->rtpBk[0], 1000);
+                    sprintf_f(rs->logs, "rjob round trip back (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                    print_f(rs->plogs, "P21", rs->logs);    
+
+                    switch(outcmd.cmd) {
+                        case BKCMD_IMAGE_IN_RSP:
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_IMAGE_IN_RSP)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_IN_RSP) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P21", rs->logs);    
+                            
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+
+                            mfourCnt += 1;
+
+                            if (mfourwait > 0) {
+                                minfo[0] = 'C';
+                                minfo[1] = mfourlist[(mfourhead % MFOUR_WAIT_LIST_SIZE)];
+
+                                mfourCnt -= 1;
+                                
+                                mfourhead += 1;
+                                mfourwait -= 1;
+
+                                write(pipeMfRx[1], minfo, 2);
+                            }
+                            
+                            break;
+                        case BKCMD_REQUIRE_AREA:           // M4 -> operator
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_REQUIRE_AREA)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_REQUIRE_AREA) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P21", rs->logs);    
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            
+                            memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+                            memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
+                            
+                            rspcmd.cmd = BKCMD_REQUIRE_AREA_RSP;
+                            rspcmd.dSize = 0;
+                            rspcmd.dPtr = 0;
+                            rspcmd.mPtr = 0;
+                            
+                            //sprintf_f(rs->logs, "print the cmd send out for cmd BKCMD_REQUIRE_AREA_RSP:\n");
+                            //print_f(rs->plogs, "P21", rs->logs);
+                            //dbgRjobCmd(&rspcmd, sizeof(mfour_rjob_cmd));
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_REQUIRE_AREA_RSP)_IN__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                            
+                            RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_REQUIRE_AREA_RSP)_OUT__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                            msync(rs->tm2[0], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                            sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_REQUIRE_AREA_RSP) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P21", rs->logs);    
+                            
+                            //sprintf_f(rs->logs, "current buff id: %d \n", mfbidx);
+                            //print_f(rs->plogs, "P21", rs->logs);
+                
+                            //outcmd.dPtr  = rx_buf;
+                            #if 1
+                            pImgArea = (t_ImageParam *)outcmd.dPtr;
+                            sprintf_f(rs->logs, "ImgArea area seqid = %d jobid = %d (x:%d, y:%d, w:%d, h:%d, totalayer: %d, selayer: %d) \n", pImgArea->SeqIdx, pImgArea->iJobIdx, pImgArea->ImageRect.oxj, 
+                                pImgArea->ImageRect.oyi, pImgArea->ImageRect.xc, pImgArea->ImageRect.yr, pImgArea->ImageLayerInfo.BKNote_Layers, pImgArea->ImageLayerInfo.SelLayerNum);
+                            print_f(rs->plogs, "P21", rs->logs);
+
+                            #if 1
+                            for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+                                decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                if ((decpic->aspDcLen == 0) && (decpic->aspDcWidth == 0)) {
+
+                                    pRect = &rs->pbDecMfour[mfbidx]->aspDecRect[ix];
+                                        
+                                    //memcpy(pRect, pArRect, sizeof(mfour_rect_st));
+
+                                    #if 1
+                                    memcpy(&decpic->aspDcData->mfourAttb, pImgArea, sizeof(t_ImageParam));
+
+                                    pRect->mfourRectX = pImgArea->ImageRect.oxj;
+                                    pRect->mfourRectY = pImgArea->ImageRect.oyi;
+                                    pRect->mfourRectW = pImgArea->ImageRect.xc;
+                                    pRect->mfourRectH = pImgArea->ImageRect.yr;
+                                    pRect->mfourLayer = pImgArea->ImageLayerInfo.SelLayerNum;
+                                    #endif
+
+                                    sprintf_f(rs->logs, "    search find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                                    print_f(rs->plogs, "P21", rs->logs);    
+
+                                    aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
+
+                                    rs->pbDecMfour[mfbidx]->aspDecRectSt[ix] = BKCMD_REQUIRE_AREA;
+                                    msync(&rs->pbDecMfour[mfbidx]->aspDecRectSt[ix], sizeof(int), MS_SYNC);
+                                    
+                                    m4id = ix;
+                                                                
+                                    minfo[0] = 'c';
+
+                                    if (ix == 0) {
+                                        minfo[1] = 0x80;
+                                    } else {
+                                        minfo[1] = ix & 0x7f;
+                                    }
+
+                                   write(pipeMfRx[1], minfo, 2);
+
+                                    if (mfourCnt > 0) {
+                                        minfo[0] = 'C';
+
+                                        mfourCnt -= 1;
+
+                                        write(pipeMfRx[1], minfo, 2);
+                                    } else {
+                                        mfourlist[(mfourtail % MFOUR_WAIT_LIST_SIZE)] = minfo[1];
+                                        mfourtail += 1;
+                                        mfourwait += 1;
+                                    }
+
+                                    break;
+                                }
+
+                            }
+
+                            #if 0 /* debug */
+                            for (ix=0; ix < BMP_DECODE_PIC_SIZE; ix++) {
+                                decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                
+                                sprintf_f(rs->logs, "check area state %d: 0x%.4x \n", ix, rs->pbDecMfour[mfbidx]->aspDecRectSt[ix]);
+                                print_f(rs->plogs, "P21", rs->logs);    
+                            }
+                            #endif
+
+                            //sprintf_f(rs->logs, "Error!!! can't find available area \n");
+                            //print_f(rs->plogs, "P21", rs->logs);    
+                            #else
+                            ix = 0;
+                            decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+
+                            pRect = &rs->pbDecMfour[mfbidx]->aspDecRect[ix];                                        
+
+                            //memcpy(pRect, pArRect, sizeof(mfour_rect_st));
+                            
+                            #if 1
+                            memcpy(&decpic->aspDcData->mfourAttb, pImgArea, sizeof(t_ImageParam));
+                            
+                            pRect->mfourRectX = pImgArea->ImageRect.oxj;
+                            pRect->mfourRectY = pImgArea->ImageRect.oyi;
+                            pRect->mfourRectW = pImgArea->ImageRect.xc;
+                            pRect->mfourRectH = pImgArea->ImageRect.yr;
+                            #endif
+
+                            sprintf_f(rs->logs, "imgArea set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                            print_f(rs->plogs, "P21", rs->logs);    
+
+                            aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
+
+                            minfo[0] = 'c';
+
+                            if (ix == 0) {
+                                minfo[1] = 0x80;
+                            } else {
+                                minfo[1] = ix & 0x7f;
+                            }
+
+                            write(pipeMfRx[1], minfo, 2);
+
+                            if (mfourCnt > 0) {
+                                minfo[0] = 'C';
+                                mfourCnt -= 1;
+                                write(pipeMfRx[1], minfo, 2);
+                            } else {
+                                mfourlist[(mfourtail % MFOUR_WAIT_LIST_SIZE)] = minfo[1];
+                                mfourtail += 1;
+                                mfourwait += 1;
+                            }
+                            #endif
+                            #else
+                            pArea = (mfour_areas_st *)outcmd.dPtr;
+                            sprintf_f(rs->logs, "req area total = %d \n", pArea->mfourAreaTot);
+                            print_f(rs->plogs, "P21", rs->logs);    
+
+                            for (ic=0, ix=0; ic < pArea->mfourAreaTot; ic++) {
+                                pArRect = &pArea->mfourAreas[ic];
+                                sprintf_f(rs->logs, "req area %d: x=%d,y=%d,w=%d,h=%d \n", ic, pArRect->mfourRectX, pArRect->mfourRectY, pArRect->mfourRectW, pArRect->mfourRectH);
+                                print_f(rs->plogs, "P21", rs->logs);    
+                            
+                                for (; ix < BMP_DECODE_PIC_SIZE; ix++) {
+                                    decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                    if ((decpic->aspDcLen == 0) && (decpic->aspDcWidth == 0)) {
+                                        pRect = &rs->pbDecMfour[mfbidx]->aspDecRect[ix];
+                                        
+                                        memcpy(pRect, pArRect, sizeof(mfour_rect_st));
+
+                                        #if 0 // test code
+                                        pRect->mfourRectX = 795;
+                                        pRect->mfourRectY = 101;
+                                        pRect->mfourRectW = 48;
+                                        pRect->mfourRectH = 48;
+                                        #endif
+
+                                        sprintf_f(rs->logs, "find and set area %d: x=%d,y=%d,w=%d,h=%d \n", ix, pRect->mfourRectX, pRect->mfourRectY, pRect->mfourRectW, pRect->mfourRectH);
+                                        print_f(rs->plogs, "P21", rs->logs);    
+                                        
+                                        aspBMPdecodeItemSet(decpic, pRect->mfourRectW, pRect->mfourRectH, 0);
+
+                                        minfo[0] = 'c';
+
+                                        if (ix == 0) {
+                                            minfo[1] = 0x80;
+                                        } else {
+                                            minfo[1] = ix & 0x7f;
+                                        }
+
+                                        write(pipeMfRx[1], minfo, 2);
+
+                                        if (mfourCnt > 0) {
+                                            minfo[0] = 'C';
+
+                                            mfourCnt -= 1;
+
+                                            write(pipeMfRx[1], minfo, 2);
+                                        } else {
+                                            mfourlist[(mfourtail % MFOUR_WAIT_LIST_SIZE)] = minfo[1];
+                                            mfourtail += 1;
+                                            mfourwait += 1;
+                                        }
+
+                                        break;
+                                    }
+
+                                }
+                            }
+                            #endif
+                            
+                            break;
+                        case BKCMD_DONE_AREA:              // M4 -> operator
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_DONE_AREA)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_DONE_AREA) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P21", rs->logs);  
+                            
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+
+                            memset(&rspcmd, 0, sizeof(mfour_rjob_cmd));
+                            memcpy(&rspcmd, &outcmd, sizeof(mfour_rjob_cmd));
+                            rspcmd.cmd = BKCMD_DONE_AREA_RSP;
+                            rspcmd.dSize = 0;
+                            rspcmd.dPtr = 0;
+                            rspcmd.mPtr = 0;
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_DONE_AREA_RSP)_IN__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+
+                            RJOB_IOCT_WT_CMD(rj1id, (unsigned long)&rspcmd);
+
+                            sprintf(rs->logs, "__M4_CMD_SEND_(%d)(BKCMD_DONE_AREA_RSP)_OUT__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 20, rs->logs);
+
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[0]);
+                            msync(rs->tm2[0], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->tm2[1], rs->tm2[0], 1000);
+                            sprintf_f(rs->logs, "RJOB_IOCT_WT_CMD (BKCMD_DONE_AREA_RSP) (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P21", rs->logs);    
+
+                            pImgOutArea = outcmd.dPtr;
+                            
+                            img_out = container_of(pImgOutArea, mfour_image_param_st, mfourAttb);
+                            jid = img_out->mfourAttb.iJobIdx;
+                            seqid = img_out->mfourAttb.SeqIdx;
+                            
+                            sprintf_f(rs->logs, "area done current buff id: %d m4id: %d (x:%d y:%d w:%d h:%d) size: %d\n", mfbidx, m4id, img_out->mfourAttb.ImageRect.oxj, 
+                                img_out->mfourAttb.ImageRect.oyi, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, outcmd.dSize);
+                            print_f(rs->plogs, "P21", rs->logs);
+                            
+                            //outcmd.dPtr  = rx_buf;
+
+                            #if 0 /*debug*/
+                            //cid = img_out->mfourIdx;
+                            cid = -1;
+                            for (ix=0; ix <BMP_DECODE_PIC_SIZE; ix++) {
+                                decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[ix];
+                                m4dst = rs->pbDecMfour[mfbidx]->aspDecRectSt[ix];
+                                img_param = decpic->aspDcData;
+
+                                sprintf_f(rs->logs, "    search match buff info %d. %d, %d (seqid: %d jobid: %d) len: %d st: 0x%.4x cid: %d\n", ix, img_param->mfourAttb.SeqIdx, img_param->mfourAttb.iJobIdx, seqid, jid, decpic->aspDcLen, m4dst, cid);
+                                print_f(rs->plogs, "P21", rs->logs);
+                                
+                                if ((decpic->aspDcLen > 0) && (cid < 0) && (m4dst == BKCMD_REQUIRE_AREA)) {
+                                    cid = ix;
+                                    rs->pbDecMfour[mfbidx]->aspDecRectSt[ix] = BKCMD_DONE_AREA;
+                                    //break;
+                                }
+                            }
+                            #else
+                            cid = m4id;
+                            #endif
+                            
+                            
+                            //bkjob_send_cmd( chan->mqOperator, &outcmd);
+                            sprintf_f(rs->logs, "send cmd BKCMD_DONE_AREA_RSP id: %d tag: %d, seqid: %d, Jobidx: %d, w: %d, h: %d \n", 
+                                    cid, (uint32_t)(outcmd.tag >> 16), seqid, jid, 
+                                    img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr);
+                            print_f(rs->plogs, "P21", rs->logs);
+
+                            decraw = &rs->pbDecMfour[mfbidx]->aspDecRaw;
+                            img_raw = decraw->aspDcData;
+
+                            if (cid < 0) {
+                                sprintf_f(rs->logs, "Error no match buff break; !! \n");
+                                print_f(rs->plogs, "P21", rs->logs);
+                                break;
+                            }
+                            
+                            decpic = &rs->pbDecMfour[mfbidx]->aspDecMfPiRaw[cid];
+                            img_param = decpic->aspDcData;
+
+                            cpyDst = img_param->mfourData;
+                            cpySrc = img_raw->mfourData;
+
+                            memcpy(cpyDst, cpySrc, 1078);
+
+                            msync(cpyDst, 1078, MS_SYNC);
+
+                            pheader = (struct bitmapHeader_s *)(img_param->mfourData - 2);
+                            //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
+
+                            imgsize = img_out->mfourAttb.ImageRect.xc * img_out->mfourAttb.ImageRect.yr;
+                            bitmapHeaderSetup(pheader, 8, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, 200, imgsize);
+                            //dbgBitmapHeader(pheader, sizeof(struct bitmapHeader_s));
+                                                        
+
+                            cpyDst = img_param->mfourData + 1078; //offset:0x436
+                            cpySrc = img_out->mfourData;
+
+                            memcpy(cpyDst, cpySrc, imgsize);
+
+                            imgsize += 1078;
+
+                            aspBMPdecodeItemSet(decpic, img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, imgsize);
+
+
+                            #if 0
+                            char filecharbmp[]="/home/root/charbmp/%c.bmp";
+                            char filecharpath[256]={0};
+                            char listchar[36] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'};
+                            char *charbmp[36] = {0};
+                            FILE *fchar=0;
+                            for (ix=0; ix<36; ix++) {
+                                charbmp[ix] = malloc(22*22);
+                            }
+
+                            for (ix=0; ix<36; ix++) {
+                                sprintf(filecharpath, filecharbmp, listchar[ix]);
+                                fchar = fopen(filecharpath, "r");
+                                if (fchar) {
+                                    sprintf_f(rs->logs, "get char bmp [%s] succeed!!! \n", filecharpath);
+                                    print_f(rs->plogs, "P21", rs->logs);
+                                } else {
+                                    sprintf_f(rs->logs, "find save bmp [%s] FAILED!!! \n", filecharpath);
+                                    print_f(rs->plogs, "P21", rs->logs);
+                                    break;
+                                }
+
+                                fclose(fchar);
+                            }
+
+                            for (ix=0; ix<36; ix++) {
+                                free(charbmp[ix]);
+                            }
+                            #endif
+
+                            sprintf_f(rs->logs, "m4attb image w: %d h: %d rtnCode: %d imgidx: %d\n", img_out->mfourAttb.ImageRect.xc, img_out->mfourAttb.ImageRect.yr, img_out->mfourAttb.iJobRtnCode, imgidx);
+                            print_f(rs->plogs, "P21", rs->logs);
+                            
+                            if (img_out->mfourAttb.iJobRtnCode == iJobImgOCR) {
+                            
+                                sprintf(rs->logs, "__OCR_START_(0x%.2x)__", img_out->mfourAttb.iJobIdx); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+    
+                                memset(outchr, 0, 36*3);
+                                if (img_out->mfourAttb.iJobIdx == SRNBox1L) {
+
+                                    clock_gettime(CLOCK_REALTIME, &mfoS);
+
+                                    BKOCR_Check6(img_param->mfourData, imgsize, outchr[1], MaxCount_SRN);
+                                    
+                                    clock_gettime(CLOCK_REALTIME, &mfoE);
+                                    tmCost = time_diff(&mfoS, &mfoE, 1000);
+
+                                    //shmem_dump_demo(outchr[1], 32);
+
+                                    pusbmeta->OCR_strlen = strlen(outchr[1]);
+                                    if (pusbmeta->OCR_strlen < 16) {
+                                        memcpy(pusbmeta->OCR_chars, outchr[1], pusbmeta->OCR_strlen);
+                                    }
+
+                                    msync(&pusbmeta->OCR_strlen, 16, MS_SYNC);
+                                    
+                                    sprintf_f(rs->logs, "SRNBox1L OCR result len: %d cost: %d.%d ms\n", pusbmeta->OCR_strlen, tmCost/1000, tmCost%1000);
+                                    print_f(rs->plogs, "P21", rs->logs);
+
+                                } 
+                                else if (img_out->mfourAttb.iJobIdx == SRNBox1R) {
+
+                                    clock_gettime(CLOCK_REALTIME, &mfoS);
+                                    
+                                    BKOCR_Check7(img_param->mfourData, imgsize, outchr[2], MaxCount_SRN);
+
+                                    clock_gettime(CLOCK_REALTIME, &mfoE);
+                                    tmCost = time_diff(&mfoS, &mfoE, 1000);
+
+                                    //shmem_dump_demo(outchr[2], 32);
+                                    
+                                    pusbmeta->OCR_strlen = strlen(outchr[2]);
+                                    if (pusbmeta->OCR_strlen < 16) {
+                                        memcpy(pusbmeta->OCR_chars, outchr[2], pusbmeta->OCR_strlen);
+                                    }
+
+                                    msync(&pusbmeta->OCR_strlen, 16, MS_SYNC);
+                                    
+                                    sprintf_f(rs->logs, "SRNBox1R OCR result len: %d cost: %d.%d ms\n", pusbmeta->OCR_strlen, tmCost/1000, tmCost%1000);
+                                    print_f(rs->plogs, "P21", rs->logs);
+
+                                }
+
+                                sprintf_f(rs->logs, "OCR RtnCode: [0x%x] iJobIdx: %d\n", img_out->mfourAttb.iJobRtnCode, img_out->mfourAttb.iJobIdx);
+                                print_f(rs->plogs, "P21", rs->logs);
+                                
+                                memset(m4startcmd, 0, 256);
+                                
+                                #if 1 /* debug show OCR result */
+                                if ((pusbmeta->OCR_strlen > 0) && (pusbmeta->OCR_strlen < 16)) {
+                                    memcpy(m4startcmd, pusbmeta->OCR_chars, pusbmeta->OCR_strlen);
+                                    
+                                    if (pusbmeta->OCR_chars[pusbmeta->OCR_strlen-1] == 0x0a) {
+                                        m4startcmd[pusbmeta->OCR_strlen-1] = '\0';
+
+                                        pusbmeta->OCR_strlen -= 1;
+                                    }
+                                    sprintf_f(rs->logs, "OCR result chars: [%s] page: %d(%d) - %d\n", m4startcmd, (imgidx+1)/2, imgidx, pusbmeta->PRI_O_SEC);
+                                    print_f(rs->plogs, "P21", rs->logs);
+
+                                    sprintf(rs->logs, "(%.2d)(%s)", pusbmeta->OCR_strlen, m4startcmd); 
+                                    tmCost = dbgShowTimeStampDemo(rs->logs,  NULL, rs, 32, rs->logs);
+
+                                    //shmem_dump_demo(m4startcmd, 16);
+
+                                    
+                                } else {
+                                    memcpy(m4startcmd, pusbmeta->OCR_chars, 15);
+                                    m4startcmd[15] = '\0';
+                                    
+                                    sprintf_f(rs->logs, "OCR result chars failed ocrlen: %d page: %d(%d) - %d\n", pusbmeta->OCR_strlen, (imgidx+1)/2, imgidx, pusbmeta->PRI_O_SEC);
+                                    print_f(rs->plogs, "P21", rs->logs);
+
+                                    sprintf(rs->logs, "(%.2d > 15) (%s)", pusbmeta->OCR_strlen, m4startcmd); 
+                                    tmCost = dbgShowTimeStampDemo(rs->logs,  NULL, rs, 32, rs->logs);
+
+                                    //shmem_dump_demo(m4startcmd, 16);
+
+                                }
+                                #endif
+
+                                sprintf(rs->logs, "__OCR_END_(LEN:%d)(%s)__", pusbmeta->OCR_strlen, m4startcmd); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 32, rs->logs);
+                                
+                            }                            
+
+                            #if DUMP_MFOUR_BMP_D    
+                            sprintf(filepath, ptfileSave, imgidx, mfbidx, cid);
+                            //fdump = find_save(filepath, ptfileSave);
+                            fdump = fopen(filepath, "w");
+                            if (fdump) {
+                                sprintf_f(rs->logs, "find save bmp [%s] succeed!!! \n", filepath);
+                                print_f(rs->plogs, "P21", rs->logs);
+                            } else {
+                                sprintf_f(rs->logs, "find save bmp [%s] FAILED!!! \n", filepath);
+                                print_f(rs->plogs, "P21", rs->logs);
+                                break;
+                            }
+
+                            dumpsrc = img_param->mfourData;
+                            dumpsize = imgsize;
+
+                            ret = fwrite((char*)dumpsrc, 1, dumpsize, fdump);
+                            sprintf_f(rs->logs, "write [%s] size: %d / %d !!! \n", filepath, ret, dumpsize);
+                            print_f(rs->plogs, "P21", rs->logs);
+
+                            fflush(fdump);
+                            fclose(fdump);
+                            sync();
+
+
+                            for (modix=0; modix < 3; modix++) {
+                                
+                                outstrlen = strlen(outchr[modix]);
+                                if (outstrlen > 0) {
+                                    
+                                    if (outstrlen > 20) {                                        
+                                        sprintf_f(rs->logs, "Error !!! the ocr output str len is %d over 20 \n", outstrlen);
+                                        print_f(rs->plogs, "P21", rs->logs);
+                                        continue;
+                                    }
+
+                                    strcpy(filepathOcr, filepath);
+                                    
+                                    ocrpath = strchr(filepathOcr, '.');
+                                    *ocrpath = '\0';
+
+                                    //sprintf_f(rs->logs, "debug strchr, p: 0x%.8x ret: 0x%.8x !!! \n", (uint32_t)filepath, (uint32_t)ocrpath);
+                                    //print_f(rs->plogs, "P21", rs->logs);
+
+                                    ocrpath = strcat(filepathOcr, "_mod%.2d_sz%.2d.txt");
+                                    sprintf(filepathOcrTxt, filepathOcr, modix, outstrlen);
+
+                                    focrtxt = fopen(filepathOcrTxt, "w");
+                                    if (focrtxt) {
+                                        sprintf_f(rs->logs, "create ocrtxt file [%s] succeed !!!\n", filepathOcrTxt);
+                                        print_f(rs->plogs, "P21", rs->logs);
+
+                                        fwrite(outchr[modix], 1, outstrlen, focrtxt);
+
+                                        fflush(focrtxt);
+                                        fclose(focrtxt);
+                                        sync();  
+                                         focrtxt = 0;
+                                     } else {
+                                        sprintf_f(rs->logs, "create ocrtxt file [%s] failed!!! \n", filepathOcrTxt);
+                                        print_f(rs->plogs, "P21", rs->logs);
+                                    }                                    
+                                }
+                            }
+
+                            memset(outchr, 0, 36*3);
+                            #endif
+                            
+                            minfo[0] = 'd';
+
+                            if (cid == 0) {
+                                minfo[1] = 0x80;
+                            } else {
+                                minfo[1] = cid & 0x7f;
+                            }
+
+                            write(pipeMfRx[1], minfo, 2);
+                            
+                            mfourCnt += 1;
+                            
+                            if (mfourwait > 0) {
+                                minfo[0] = 'C';
+                                minfo[1] = mfourlist[(mfourhead % MFOUR_WAIT_LIST_SIZE)];
+
+                                mfourCnt -= 1;
+                                
+                                mfourhead += 1;
+                                mfourwait -= 1;
+
+                                write(pipeMfRx[1], minfo, 2);
+                            }
+                            
+                            break;
+                        case BKCMD_ABORT:                  // M4 -> operator
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_ABORT) \n", outcmd.cmd);
+                            print_f(rs->plogs, "P21", rs->logs);    
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            
+                            //bkjob_send_cmd( chan->mqOperator, &cmd );
+                            break;
+                        case BKCMD_IMAGE_COMPLETE:         // M4 -> operator
+                            sprintf(rs->logs, "__M4_CMD_RECV_(%d)(BKCMD_IMAGE_COMPLETE)__", mfbidx); 
+                            tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 26, rs->logs);
+                            
+                            clock_gettime(CLOCK_REALTIME, rs->tm2[1]);
+                            msync(rs->tm2[1], sizeof(struct timespec), MS_SYNC);
+                            
+                            tmCost = time_diff(rs->rtpTo[1], rs->tm2[1], 1000);
+                            sprintf_f(rs->logs, "Read rjob command %.4x (BKCMD_IMAGE_COMPLETE) (cost: %d.%d ms)\n", outcmd.cmd, tmCost/1000, tmCost%1000);
+                            print_f(rs->plogs, "P21", rs->logs);  
+                            
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            
+
+                            minfo[0] = 'e';
+                            write(pipeMfRx[1], minfo, 1);
+                            //bkjob_send_cmd( chan->mqOperator, &cmd );
+                            break;
+                        default:
+                            sprintf_f(rs->logs, "Read rjob command %.4x (UNKNOWN) \n", outcmd.cmd);
+                            print_f(rs->plogs, "P21", rs->logs);    
+                            //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                            
+                            sprintf_f(rs->logs, "Error!!! unknowned cmd 0x%.2x !!!\n", outcmd.cmd);
+                            print_f(rs->plogs, "P21", rs->logs);    
+                            break;
+                    }
+
+                    clock_gettime(CLOCK_REALTIME, rs->rtpBk[1]);
+                    msync(rs->rtpBk[1], sizeof(struct timespec), MS_SYNC);
+
+                    tmCost = time_diff(rs->rtpBk[0], rs->rtpBk[1], 1000);
+                    sprintf_f(rs->logs, "rjob round trip back delay (cost: %d.%d ms)\n", tmCost/1000, tmCost%1000);
+                    print_f(rs->plogs, "P21", rs->logs); 
+                    
+                    if (outcmd.cmd == BKCMD_IMAGE_COMPLETE) {
+                        break;
+                    }
+                }
+                
+            }
+            break;
+        default:
+            sprintf_f(rs->logs, "Error!!! unknown cmd: %d !!!\n", tcmd);
+            print_f(rs->plogs, "P21", rs->logs);    
+            break;
+        }
+
+    }
+    
+    p21_end(rs);
+    
+    return 0;
+}
+
+#if MFOUR_API
+#define LOG_P22_EN (1)
+static int p22(struct procRes_s *rs)
+{
+    int ret=0;
+    char ch=0;
+    
+    sprintf_f(rs->logs, "p22\n");
+    print_f(rs->plogs, "P22", rs->logs);
+
+    p22_init(rs);
+
+    prctl(PR_SET_NAME, "msp-p22");
+
+    //mfourSetPipEpt1(pipMfTx);
+    //mfourSetPipEpt2(pipMfRx);
+    
+    mfourmaind(rs->pbMfTxBuff, pipMfTx, pipMfRx);
+    
+    p22_end(rs);
+
+    return 0;
+}
+#endif
+
 
 #define DATA_RX_SIZE RING_BUFF_NUM
 #define DATA_TX_SIZE RING_BUFF_NUM
