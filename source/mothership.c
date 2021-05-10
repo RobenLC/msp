@@ -140,7 +140,7 @@ typedef struct
 }   t_ImageParam;  
 #endif
 
-#define LOG_ALL_DISABLE (1)
+#define LOG_ALL_DISABLE (0)
 
 #define ONLY_ONE_USB (0)
 #if DISABLE_USB
@@ -97753,171 +97753,206 @@ int main(int argc, char *argv[])
     pmrs->sid[0] = fork();
     if (!pmrs->sid[0]) {
         p1(&rs[0], &rs[6]);
+        goto end;
     } else {
         len = strlen(argv[0]);
         memset(argv[0], 0, len);
         sprintf(argv[0], "spi0");
         pmrs->sid[1] = fork();
-        if (!pmrs->sid[1]) {
-            p2(&rs[1]);
-        } else {
-            len = strlen(argv[0]);
-            memset(argv[0], 0, len);
-            sprintf(argv[0], "spi1");
-            pmrs->sid[2] = fork();
-            if (!pmrs->sid[2]) {
-                p3(&rs[2]);
-            } else {
-                len = strlen(argv[0]);
-                memset(argv[0], 0, len);
-                sprintf(argv[0], "port 6000");
-                pmrs->sid[3] = fork();
-                if (!pmrs->sid[3]) {
-                    p4(&rs[3]);
-                } else {
-                    len = strlen(argv[0]);
-                    memset(argv[0], 0, len);
-                    sprintf(argv[0], "port 5000");
-                    pmrs->sid[4] = fork();
-                    if (!pmrs->sid[4]) {
-                        p5(&rs[4], &rs[5]);
-                    } else {
-                        len = strlen(argv[0]);
-                        memset(argv[0], 0, len);
-                        sprintf(argv[0], "command");
-                        pmrs->sid[5] = fork();
-                        if (!pmrs->sid[5]) {
-                            dbg(pmrs);
-                        } else {
-                            len = strlen(argv[0]);
-                            memset(argv[0], 0, len);
-                            sprintf(argv[0], "port 4000");
-                            pmrs->sid[6] = fork();
-                            if (!pmrs->sid[6]) {
-                                p6(&rs[7]);
-                            } else {
-                                len = strlen(argv[0]);
-                                memset(argv[0], 0, len);
-                                sprintf(argv[0], "port 7000");
-                                pmrs->sid[7] = fork();
-                                if (!pmrs->sid[7]) {
-                                    p7(&rs[8]);
-                                } else {
-                                    len = strlen(argv[0]);
-                                    memset(argv[0], 0, len);
-                                    sprintf(argv[0], "udp");
-                                    pmrs->sid[8] = fork();
-                                    if (!pmrs->sid[8]) {
-                                        p8(&rs[9]);
-                                    } else {              
-                                        len = strlen(argv[0]);
-                                        memset(argv[0], 0, len);
-                                        sprintf(argv[0], "usbhost0");
-                                        pmrs->sid[9] = fork();
-                                        if (!pmrs->sid[9]) {
-                                            p9(&rs[10]);
-                                        } else {              
-                                            len = strlen(argv[0]);
-                                            memset(argv[0], 0, len);
-                                            sprintf(argv[0], "usbhost1");
-                                            pmrs->sid[10] = fork();
-                                            if (!pmrs->sid[10]) {
-                                                p10(&rs[11]);
-                                            } else {              
-                                                len = strlen(argv[0]);
-                                                memset(argv[0], 0, len);
-                                                sprintf(argv[0], "g_printer");
-                                                pmrs->sid[11] = fork();
-                                                if (!pmrs->sid[11]) {
-                                                    p11(&rs[12], &rs[13], &rs[14]);
-                                                } else {
-#if GHP_EN
-                                                    len = strlen(argv[0]);
-                                                    memset(argv[0], 0, len);
-                                                    sprintf(argv[0], "m4");
-                                                    pmrs->sid[12] = fork();
-                                                    if (!pmrs->sid[12]) {
-                                                        p12(&rs[15]);
-                                                    } else {
-                                                        len = strlen(argv[0]);
-                                                        memset(argv[0], 0, len);
-                                                        sprintf(argv[0], "jpghost0");
-                                                        pmrs->sid[13] = fork();
-                                                        if (!pmrs->sid[13]) {
-                                                            p13(&rs[16]);
-                                                        } else {
-                                                            len = strlen(argv[0]);
-                                                            memset(argv[0], 0, len);
-                                                            sprintf(argv[0], "jpghost1");
-                                                            pmrs->sid[14] = fork();
-                                                            if (!pmrs->sid[14]) {
-                                                                p14(&rs[17]);
-                                                            } else {
-                                                                len = strlen(argv[0]);
-                                                                memset(argv[0], 0, len);
-                                                                sprintf(argv[0], "jpgenode");
-                                                                pmrs->sid[15] = fork();
-                                                                if (!pmrs->sid[15]) {
-                                                                    p15(&rs[18]);
-                                                                } else {
-                                                                    len = strlen(argv[0]);
-                                                                    memset(argv[0], 0, len);
-                                                                    sprintf(argv[0], "m4t");
-                                                                    pmrs->sid[16] = fork();
-                                                                    if (!pmrs->sid[16]) {
-                                                                        p16(&rs[19]);
-                                                                    } else {
-                                                                        len = strlen(argv[0]);
-                                                                        memset(argv[0], 0, len);
-                                                                        sprintf(argv[0], "m4r");
-                                                                        pmrs->sid[17] = fork();
-                                                                        if (!pmrs->sid[17]) {
-                                                                            p17(&rs[20]);
-                                                                        } else {
-                                                                            #if MFOUR_API
-                                                                            len = strlen(argv[0]);
-                                                                            memset(argv[0], 0, len);
-                                                                            sprintf(argv[0], "m4");
-                                                                            pmrs->sid[18] = fork();
-                                                                            if (!pmrs->sid[18]) {
-                                                                                p18(&rs[21]);
-                                                                            } else {                                                                        
-                                                                                len = strlen(argv[0]);
-                                                                                memset(argv[0], 0, len);
-                                                                                sprintf(argv[0], "func");
-                                                                                p0(pmrs);
-                                                                            }
-                                                                            #else 
-                                                                            len = strlen(argv[0]);
-                                                                            memset(argv[0], 0, len);
-                                                                            sprintf(argv[0], "func");
-                                                                            p0(pmrs);
-                                                                            #endif
-                                                                        }                                                                        
-                                                                    }                                                                
-                                                                }                                                               
-                                                            }                                                    
-                                                        }                                                    
-                                                    }
-
-#else
-                                                    len = strlen(argv[0]);
-                                                    memset(argv[0], 0, len);
-                                                    sprintf(argv[0], "func");
-                                                    p0(pmrs);
-#endif
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
+
+    if (!pmrs->sid[1]) {
+        p2(&rs[1]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "spi1");
+        pmrs->sid[2] = fork();
+    }
+
+    if (!pmrs->sid[2]) {
+        p3(&rs[2]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "port 6000");
+        pmrs->sid[3] = fork();
+    }
+
+    if (!pmrs->sid[3]) {
+        p4(&rs[3]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "port 5000");
+        pmrs->sid[4] = fork();
+    }
+
+    if (!pmrs->sid[4]) {
+        p5(&rs[4], &rs[5]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "command");
+        pmrs->sid[5] = fork();
+    }
+
+    if (!pmrs->sid[5]) {
+        dbg(pmrs);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "port 4000");
+        pmrs->sid[6] = fork();
+    }
+
+    if (!pmrs->sid[6]) {
+        p6(&rs[7]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "port 7000");
+        pmrs->sid[7] = fork();
+    }
+
+    if (!pmrs->sid[7]) {
+        p7(&rs[8]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "udp");
+        pmrs->sid[8] = fork();
+    }
+
+    if (!pmrs->sid[8]) {
+        p8(&rs[9]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "usbhost0");
+        pmrs->sid[9] = fork();
+    }
+
+    if (!pmrs->sid[9]) {
+        p9(&rs[10]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "usbhost1");
+        pmrs->sid[10] = fork();
+    }
+
+    if (!pmrs->sid[10]) {
+        p10(&rs[11]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "g_printer");
+        pmrs->sid[11] = fork();
+    }
+
+    if (!pmrs->sid[11]) {
+        p11(&rs[12], &rs[13], &rs[14]);
+        goto end;
+    }
+
+#if GHP_EN
+    else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "m4");
+        pmrs->sid[12] = fork();
+    }
+
+    if (!pmrs->sid[12]) {
+        p12(&rs[15]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "jpghost0");
+        pmrs->sid[13] = fork();
+    }
+
+    if (!pmrs->sid[13]) {
+        p13(&rs[16]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "jpghost1");
+        pmrs->sid[14] = fork();
+    }
+
+    if (!pmrs->sid[14]) {
+        p14(&rs[17]);
+        goto end;
+    } else {    
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "jpgenode");
+        pmrs->sid[15] = fork();
+    }
+
+    if (!pmrs->sid[15]) {
+        p15(&rs[18]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "m4t");
+        pmrs->sid[16] = fork();
+    }
+
+    if (!pmrs->sid[16]) {
+        p16(&rs[19]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "m4r");
+        pmrs->sid[17] = fork();
+    }
+
+    if (!pmrs->sid[17]) {
+        p17(&rs[20]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "m4s");
+        pmrs->sid[18] = fork();
+    }
+
+    if (!pmrs->sid[18]) {
+        p18(&rs[21]);
+        goto end;
+    }
+    else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "func");
+        p0(pmrs);
+    }
+#else
+    else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "func");
+        p0(pmrs);
+    }
+#endif
+
     
     end:
 
