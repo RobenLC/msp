@@ -212,8 +212,8 @@ typedef struct
 #define IOCTL_RJOB_RCMD     _IOR(0xb5,IOCNR_RJOB_RCMD,mfour_rjob_cmd)
 
 #if MFOUR_API
-#define RJOB_IOCT_WT_CMD(a, b)    RJOB_IOCT_WT_CMD_API(a, (void *)b)
-#define RJOB_IOCT_RD_CMD(a, b)    RJOB_IOCT_RD_CMD_API(a, (void *)b)
+#define RJOB_IOCT_WT_CMD(a, b)    RJOB_IOCT_WT_CMD_API(a, (void *)b, pipmftx)
+#define RJOB_IOCT_RD_CMD(a, b)    RJOB_IOCT_RD_CMD_API(a, (void *)b, pipmfrx)
 #else
 #define RJOB_IOCT_WT_CMD(a, b)    ioctl(a, IOCTL_RJOB_WCMD, b)
 #define RJOB_IOCT_RD_CMD(a, b)    ioctl(a, IOCTL_RJOB_RCMD, b)
@@ -1759,7 +1759,7 @@ struct usbfileid_s{
 struct mainRes_s{
     char nmrs[32];
     uint32_t mspconfig;
-    int sid[19];
+    int sid[23];
     int sfm[2];
     int smode;
     int usbmfd;
@@ -1774,8 +1774,8 @@ struct mainRes_s{
     struct folderQueue_s *folder_dirt;
     struct machineCtrl_s mchine;
     // 3 pipe
-    struct pipe_s pipedn[22];
-    struct pipe_s pipeup[22];
+    struct pipe_s pipedn[26];
+    struct pipe_s pipeup[26];
     // data mode share memory
     struct shmem_s dataRx;
     // command mode share memory
@@ -1821,10 +1821,11 @@ struct mainRes_s{
     struct bitmapHeader_s bmpheaderDuo;
     struct bitmapRotate_s bmpRotate;
     struct bitmapDecodeMfour_s bmpDecMfour[4];
-    char       *bmpMfourTxbuff;
-    char       *bmpMfourRxbuff;
-    int          *bmpMfourPipTx;
-    int          *bmpMfourPipRx;
+    
+    char       *bmpMfourTxbuff[2];
+    char       *bmpMfourRxbuff[2];
+    int          *bmpMfourPipTx[2];
+    int          *bmpMfourPipRx[2];
 
     char netIntfs[32];
     char netIntwpa[32];
@@ -1909,7 +1910,9 @@ struct procRes_s{
     
     char *pbMfTxBuff;
     char *pbMfRxBuff;
-
+    int *pbMfPipTx;
+    int *pbMfPipRx;
+    
     struct logPool_s *plogs;
     char *pnetIntfs;
     char *pnetIntwpa;
@@ -2130,8 +2133,11 @@ int m4_enter(int id);
 static int *pipMfTx=0;
 static int *pipMfRx=0;
 
-static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd);
-static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd);
+static int *pipMfTxd=0;
+static int *pipMfRxd=0;
+
+static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd, int *pip);
+static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd, int *pip);
 
 #define RJOB_IOCT_WT_CMD_API    mfourWtCmd
 #define RJOB_IOCT_RD_CMD_API    mfourRdCmd
@@ -2375,12 +2381,12 @@ static int draw(void)
 
 #if MFOUR_API
 #define MOUR_WTCMD_LOG_EN 0
-static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
+static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd, int *pip)
 {
     int len=0;
     char ch2[2]={0};
 
-    if (!pipMfTx) return -1;
+    if (!pip) return -1;
 
     len = sizeof(mfour_rjob_cmd);
 
@@ -2397,15 +2403,15 @@ static int mfourWtCmd(int dvid, mfour_rjob_cmd  *fcmd)
 
     //dbgRjobCmd(fcmd, len);
     
-    write(pipMfTx[1], ch2, 2);
+    write(pip[1], ch2, 2);
     
-    write(pipMfTx[1], fcmd, len);
+    write(pip[1], fcmd, len);
 
     return 0;
 }
 
 #define MOUR_RDCMD_LOG_EN 0
-static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
+static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd, int *pip)
 {
     int pipRet=0, len=0, op=0, txd=0;
     char ch2[2]={0};
@@ -2414,7 +2420,7 @@ static int mfourRdCmd(int dvid, mfour_rjob_cmd  *fcmd)
 
     recvptr = fcmd->dPtr;
 
-    pllfd[0].fd = pipMfRx[0];
+    pllfd[0].fd = pip[0];
     pllfd[0].events = POLLIN;
 
     while (1) {
@@ -56311,8 +56317,8 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (0)
-#define MAX_152_EVENT (19)
+#define DBG_BKN_GATE (1)
+#define MAX_152_EVENT (22)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 {
@@ -56579,7 +56585,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
     pllfd[13].fd = mrs->pipeup[17].rt[0];
     pllfd[13].events = POLLIN;
-    outfd[13] = mrs->pipedn[15].rt[1];
+    outfd[13] = mrs->pipedn[22].rt[1];
     infd[13] = mrs->pipedn[17].rt[1];
 
     pllfd[14].fd = mrs->pipeup[18].rt[0];
@@ -56597,6 +56603,22 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     outfd[18] = mrs->pipedn[15].rt[1];
     infd[18] = mrs->pipedn[20].rt[1];
 
+    pllfd[19].fd = mrs->pipeup[22].rt[0];
+    pllfd[19].events = POLLIN;
+    //outfd[11] = mrs->pipedn[18].rt[1];
+    outfd[19] = mrs->pipedn[24].rt[1];
+    infd[19] = mrs->pipedn[22].rt[1];
+
+    pllfd[20].fd = mrs->pipeup[23].rt[0];
+    pllfd[20].events = POLLIN;
+    outfd[20] = mrs->pipedn[24].rt[1];
+    infd[20] = mrs->pipedn[23].rt[1];
+
+    pllfd[21].fd = mrs->pipeup[24].rt[0];
+    pllfd[21].events = POLLIN;
+    outfd[21] = mrs->pipedn[22].rt[1];
+    infd[21] = mrs->pipedn[24].rt[1];
+    
     while (1) {
         ret = read(pllfd[1].fd, &chv, 1);
         while (ret > 0) {
@@ -56744,10 +56766,15 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             
                             mrs_ipc_get(mrs, minfo, 2, 2);
 
-                            //sprintf_f(mrs->log, "[GW] get forward msg from p3: 0x%.2x + 0x%.2x \n", minfo[0], minfo[1]);
-                            //print_f(mrs->plog, "fs152", mrs->log);
+                            sprintf_f(mrs->log, "[GW] get forward msg from p3: 0x%.2x + 0x%.2x to %d\n", minfo[0], minfo[1], minfo[1] % 2);
+                            print_f(mrs->plog, "fs152", mrs->log);
                             
-                            write(infd[11], minfo, 2);
+                            if ((minfo[1] % 2) == 0) {
+                                write(infd[11], minfo, 2);
+                                //write(infd[19], minfo, 2);
+                            } else {
+                                write(infd[19], minfo, 2);
+                            }
                         } else {
                             sprintf_f(mrs->log, "[GW] Error!!! unknown cmd: 0x%.2x id: %d \n", pllcmd[ins], ins);
                             print_f(mrs->plog, "fs152", mrs->log);
@@ -57949,7 +57976,191 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             }
                         }
                         break;
+                    case 19: // rs22 p19
+                        //sprintf_f(mrs->log, "[GW] m4 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                        //print_f(mrs->plog, "fs152", mrs->log);
 
+                        if (latcmd[0] == '1') {
+                            sprintf_f(mrs->log, "[GW] m4 block till flow stop skip input ch: (0x%.2x) \n", pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            if (pllcmd[ins] == '1') {
+                                break;
+                            }
+                            else if (pllcmd[ins] == 'F') {
+                            
+                                //pollfo[0] = '1';
+                                //write(infd[ins], pollfo, 1);
+                                
+                                gerr = -1;
+                                while (gerr <= 0) {
+                                    gerr = read(pllfd[ins].fd, &chm, 1);
+                                }
+                                
+                                if (chm == 0x80) {
+                                    mfidx = 0;
+                                } else {
+                                    mfidx = chm & 0x7f;
+                                }
+                            
+                                sprintf_f(mrs->log, "[GW] F block m4 get sec chr: (0x%.2x) buff idx: %d\n", chm, mfidx);
+                                print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            
+                                ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
+                                sprintf_f(mrs->log, "[GW] block decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                                print_f(mrs->plog, "fs152", mrs->log);
+
+                                pollfo[1] = chm;
+
+                                pollfo[0] = 'a';
+                                write(infd[20], pollfo, 2);
+                            
+                                pollfo[0] = 'k';
+                                write(infd[21], pollfo, 2);
+
+                                /*
+                                while (1) {
+                                    pllinf = 0;
+                                    gerr = read(pllfd[11].fd, &pllinf, 1);
+                                    while (gerr < 0) {
+                                        pllinf = 0;
+                                        gerr = read(pllfd[11].fd, &pllinf, 1);
+                                    }
+
+                                    if (pllinf == '1') break;
+                                }
+                                */
+                                break;
+                            }
+                        }
+
+                        if (pllcmd[ins] == 'R') {
+                            pollfo[0] = 'e';
+                            gerr = -1;
+                            while (gerr <= 0) {
+                                gerr = read(pllfd[ins].fd, &chm, 1);
+                            }
+                                
+                            if (chm == 0x80) {
+                                mfidx = 0;
+                            } else {
+                                mfidx = chm & 0x7f;
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] R m4 get sec chr: (0x%.2x) buff idx: %d\n", chm, mfidx);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            
+                            ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            /*
+                            mstatus = (mstatus << 1) | 0x01;
+                            
+                            ret = aspBMPdecodeBuffStatusSet(&mrs->bmpDecMfour[mfidx], mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d set status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            */
+                            
+                            pollfo[1] = chm;
+                            
+                            write(infd[14], pollfo, 2);
+                        }
+                        else if (pllcmd[ins] == 'S') {
+                            pollfo[0] = 'c';
+                            gerr = -1;
+                            while (gerr <= 0) {
+                                gerr = read(pllfd[ins].fd, &chm, 1);
+                            }
+                                
+                            if (chm == 0x80) {
+                                mfidx = 0;
+                            } else {
+                                mfidx = chm & 0x7f;
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] S m4 get sec chr: (0x%.2x) buff idx: %d\n", chm, mfidx);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            
+                            ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            /*
+                            mstatus = (mstatus << 1) | 0x01;
+                            
+                            ret = aspBMPdecodeBuffStatusSet(&mrs->bmpDecMfour[mfidx], mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d set status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            */
+                            
+                            pollfo[1] = chm;
+                            
+                            write(infd[14], pollfo, 2);
+                        }
+                        else if (pllcmd[ins] == 'F') {
+
+                            //pollfo[0] = 'k';
+                            //write(infd[ins], pollfo, 1);
+
+                            
+                            gerr = -1;
+                            while (gerr <= 0) {
+                                gerr = read(pllfd[ins].fd, &chm, 1);
+                            }
+                                
+                            if (chm == 0x80) {
+                                mfidx = 0;
+                            } else {
+                                mfidx = chm & 0x7f;
+                            }
+                            
+                            sprintf_f(mrs->log, "[GW] F m4 get sec chr: (0x%.2x) buff idx: %d\n", chm, mfidx);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            
+                            ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            
+                            /*
+                            mstatus = (mstatus << 1) | 0x01;
+                            
+                            ret = aspBMPdecodeBuffStatusSet(&mrs->bmpDecMfour[mfidx], mstatus);
+                            sprintf_f(mrs->log, "[GW] decode bmp buff %d set status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                            */
+                            
+                            pollfo[1] = chm;
+
+                            pollfo[0] = 'a';
+                            write(infd[20], pollfo, 2);
+                            
+                            pollfo[0] = 'i';
+                            write(infd[21], pollfo, 2);
+
+                        }
+                        else {
+                            sprintf_f(mrs->log, "[GW] Error!!! unknown ch !!!m4 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                            print_f(mrs->plog, "fs152", mrs->log);
+                        }
+                            
+                        
+                        break;
+                    case 20: // p20
+                        sprintf_f(mrs->log, "[GW] rjob0 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                        print_f(mrs->plog, "fs152", mrs->log);
+
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
+                    case 21: // p21
+                        sprintf_f(mrs->log, "[GW] rjob1 get chr: %c(0x%.2x) id: %d\n", pllcmd[ins], pllcmd[ins], ins);
+                        print_f(mrs->plog, "fs152", mrs->log);
+
+                        write(outfd[ins], &pllcmd[ins], 1);
+                        break;
                     case 0:
                     case 2:
 
@@ -92945,6 +93156,12 @@ static int p16(struct procRes_s *rs)
     struct pollfd pllfd[2]={0};
     int *pipeMfCom=0, *pipeMfTx=0;
     int tmCost=0;
+    #if MFOUR_API
+    int *pipmftx=0;
+    int *pipmfrx=0;
+    pipmftx = rs->pbMfPipTx;
+    pipmfrx = rs->pbMfPipRx;
+    #endif
     
     sprintf_f(rs->logs, "p16\n");
     print_f(rs->plogs, "P16", rs->logs);
@@ -93238,7 +93455,13 @@ static int p17(struct procRes_s *rs)
     char outchr[3][36]={0};
     struct timespec mfoS, mfoE;
     int tmCost=0;
-
+    #if MFOUR_API
+    int *pipmftx=0;
+    int *pipmfrx=0;
+    pipmftx = rs->pbMfPipTx;
+    pipmfrx = rs->pbMfPipRx;
+    #endif
+    
     //clock_gettime(CLOCK_REALTIME, &mfoE);
     //tmCost = time_diff(&mfoS, &mfoE, 1000000);
     
@@ -94063,7 +94286,7 @@ static int p18(struct procRes_s *rs)
     //mfourSetPipEpt1(pipMfTx);
     //mfourSetPipEpt2(pipMfRx);
     
-    mfourmaind(rs->pbMfTxBuff, pipMfTx, pipMfRx);
+    mfourmaind(rs->pbMfTxBuff, rs->pbMfPipTx, rs->pbMfPipRx);
     
     p18_end(rs);
 
@@ -94072,7 +94295,7 @@ static int p18(struct procRes_s *rs)
 #endif
 
 #define SAVE_DONE_IMG_D (0)
-#define LOG_P19_EN (0)
+#define LOG_P19_EN (1)
 static int p19(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
@@ -94844,6 +95067,13 @@ static int p20(struct procRes_s *rs)
     struct pollfd pllfd[2]={0};
     int *pipeMfCom=0, *pipeMfTx=0;
     int tmCost=0;
+    #if MFOUR_API
+    int *pipmftx=0;
+    int *pipmfrx=0;
+    pipmftx = rs->pbMfPipTx;
+    pipmfrx = rs->pbMfPipRx;
+    #endif
+    
     
     sprintf_f(rs->logs, "p20\n");
     print_f(rs->plogs, "P20", rs->logs);
@@ -95137,6 +95367,12 @@ static int p21(struct procRes_s *rs)
     char outchr[3][36]={0};
     struct timespec mfoS, mfoE;
     int tmCost=0;
+    #if MFOUR_API
+    int *pipmftx=0;
+    int *pipmfrx=0;
+    pipmftx = rs->pbMfPipTx;
+    pipmfrx = rs->pbMfPipRx;
+    #endif
 
     //clock_gettime(CLOCK_REALTIME, &mfoE);
     //tmCost = time_diff(&mfoS, &mfoE, 1000000);
@@ -95962,7 +96198,7 @@ static int p22(struct procRes_s *rs)
     //mfourSetPipEpt1(pipMfTx);
     //mfourSetPipEpt2(pipMfRx);
     
-    mfourmaind(rs->pbMfTxBuff, pipMfTx, pipMfRx);
+    mfourmaind(rs->pbMfTxBuff, rs->pbMfPipTx, rs->pbMfPipRx);
     
     p22_end(rs);
 
@@ -95982,7 +96218,7 @@ int main(int argc, char *argv[])
     char dir[256] = "/mnt/mmc2";
     char wfssid[128] = "/root/scaner/ssid.gen";
     struct mainRes_s *pmrs;
-    struct procRes_s rs[22];
+    struct procRes_s rs[26];
     int ix, ret, len;
     char *log;
     int tdiff;
@@ -97599,31 +97835,59 @@ int main(int argc, char *argv[])
     aspBMPdecodeAllocate(pmrs, 3);
 
     #if MFOUR_API
+    // first
     len = 64 * 1024;
-    pmrs->bmpMfourTxbuff = aspSalloc(len);
-    if (pmrs->bmpMfourTxbuff) {
-        memset(pmrs->bmpMfourTxbuff, 0, len);
+    pmrs->bmpMfourTxbuff[0] = aspSalloc(len);
+    if (pmrs->bmpMfourTxbuff[0]) {
+        memset(pmrs->bmpMfourTxbuff[0], 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 1st tx buff failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    len = 64 * 1024;
+    pmrs->bmpMfourRxbuff[0] = aspSalloc(len);
+    if (pmrs->bmpMfourRxbuff[0]) {
+        memset(pmrs->bmpMfourRxbuff[0], 0, len);
+    } else {
+        sprintf_f(pmrs->log, "allocate memory for M4 1st rx buff failed !! size: %d KB\n", len / 1024); 
+        print_f(pmrs->plog, "USB", pmrs->log);
+    }
+
+    pmrs->bmpMfourPipTx[0] = aspSalloc(sizeof(int) * 2);
+    pipe2(pmrs->bmpMfourPipTx[0], O_NONBLOCK);    
+    pmrs->bmpMfourPipRx[0] = aspSalloc(sizeof(int) * 2);
+    pipe2(pmrs->bmpMfourPipRx[0], O_NONBLOCK);
+
+    pipMfTx = pmrs->bmpMfourPipTx[0];
+    pipMfRx = pmrs->bmpMfourPipRx[0];
+
+    //second
+    len = 64 * 1024;
+    pmrs->bmpMfourTxbuff[1] = aspSalloc(len);
+    if (pmrs->bmpMfourTxbuff[1]) {
+        memset(pmrs->bmpMfourTxbuff[1], 0, len);
     } else {
         sprintf_f(pmrs->log, "allocate memory for M4 tx buff failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
 
     len = 64 * 1024;
-    pmrs->bmpMfourRxbuff = aspSalloc(len);
-    if (pmrs->bmpMfourRxbuff) {
-        memset(pmrs->bmpMfourRxbuff, 0, len);
+    pmrs->bmpMfourRxbuff[1] = aspSalloc(len);
+    if (pmrs->bmpMfourRxbuff[1]) {
+        memset(pmrs->bmpMfourRxbuff[1], 0, len);
     } else {
         sprintf_f(pmrs->log, "allocate memory for M4 rx buff failed !! size: %d KB\n", len / 1024); 
         print_f(pmrs->plog, "USB", pmrs->log);
     }
 
-    pmrs->bmpMfourPipTx = aspSalloc(sizeof(int) * 2);
-    pipe2(pmrs->bmpMfourPipTx, O_NONBLOCK);    
-    pmrs->bmpMfourPipRx = aspSalloc(sizeof(int) * 2);
-    pipe2(pmrs->bmpMfourPipRx, O_NONBLOCK);
+    pmrs->bmpMfourPipTx[1] = aspSalloc(sizeof(int) * 2);
+    pipe2(pmrs->bmpMfourPipTx[1], O_NONBLOCK);    
+    pmrs->bmpMfourPipRx[1] = aspSalloc(sizeof(int) * 2);
+    pipe2(pmrs->bmpMfourPipRx[1], O_NONBLOCK);
 
-    pipMfTx = pmrs->bmpMfourPipTx;
-    pipMfRx = pmrs->bmpMfourPipRx;
+    pipMfTxd = pmrs->bmpMfourPipTx[1];
+    pipMfRxd = pmrs->bmpMfourPipRx[1];    
     #endif
     
     aspBMPdecodeBuffInit(&pmrs->bmpDecMfour[0]);
@@ -97681,6 +97945,10 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipedn[19].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[20].rt, O_NONBLOCK);
     pipe2(pmrs->pipedn[21].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[22].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[23].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[24].rt, O_NONBLOCK);
+    pipe2(pmrs->pipedn[25].rt, O_NONBLOCK);
 #endif
 
     pipe2(pmrs->pipeup[0].rt, O_NONBLOCK);
@@ -97706,6 +97974,10 @@ int main(int argc, char *argv[])
     pipe2(pmrs->pipeup[19].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[20].rt, O_NONBLOCK);
     pipe2(pmrs->pipeup[21].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[22].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[23].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[24].rt, O_NONBLOCK);
+    pipe2(pmrs->pipeup[25].rt, O_NONBLOCK);
 #endif
 
     res_put_in(&rs[0], pmrs, 0);
@@ -97731,6 +98003,10 @@ int main(int argc, char *argv[])
     res_put_in(&rs[19], pmrs, 19);
     res_put_in(&rs[20], pmrs, 20);
     res_put_in(&rs[21], pmrs, 21);
+    res_put_in(&rs[22], pmrs, 22);
+    res_put_in(&rs[23], pmrs, 23);
+    res_put_in(&rs[24], pmrs, 24);
+    res_put_in(&rs[25], pmrs, 25);
 #endif
   
 //  Share memory init
@@ -97941,9 +98217,50 @@ int main(int argc, char *argv[])
     else {
         len = strlen(argv[0]);
         memset(argv[0], 0, len);
+        sprintf(argv[0], "p12f");
+        pmrs->sid[19] = fork();
+    }
+
+    if (!pmrs->sid[19]) {
+        p19(&rs[22]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "p16f");
+        pmrs->sid[20] = fork();
+    }
+    
+    if (!pmrs->sid[20]) {
+        p20(&rs[23]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "p17f");
+        pmrs->sid[21] = fork();
+    }
+    
+    if (!pmrs->sid[21]) {
+        p21(&rs[24]);
+        goto end;
+    } else {
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
+        sprintf(argv[0], "p18f");
+        pmrs->sid[22] = fork();
+    }
+    
+    if (!pmrs->sid[22]) {
+        p22(&rs[25]);
+        goto end;
+    } else {        
+        len = strlen(argv[0]);
+        memset(argv[0], 0, len);
         sprintf(argv[0], "func");
         p0(pmrs);
     }
+    
 #else
     else {
         len = strlen(argv[0]);
@@ -98361,8 +98678,22 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
     rs->pbDecMfour[2] = &mrs->bmpDecMfour[2];
     rs->pbDecMfour[3] = &mrs->bmpDecMfour[3];
     #if MFOUR_API
-    rs->pbMfTxBuff = mrs->bmpMfourTxbuff;
-    rs->pbMfRxBuff = mrs->bmpMfourRxbuff;
+    if ((idx == 15) || (idx == 19) || (idx == 20) || (idx == 21)) {
+        rs->pbMfTxBuff = mrs->bmpMfourTxbuff[0];
+        rs->pbMfRxBuff = mrs->bmpMfourRxbuff[0];
+        rs->pbMfPipTx = mrs->bmpMfourPipTx[0];
+        rs->pbMfPipRx = mrs->bmpMfourPipRx[0];
+    } else if ((idx == 22) || (idx == 23) || (idx == 24) || (idx == 25)) {
+        rs->pbMfTxBuff = mrs->bmpMfourTxbuff[1];
+        rs->pbMfRxBuff = mrs->bmpMfourRxbuff[1];
+        rs->pbMfPipTx = mrs->bmpMfourPipTx[1];
+        rs->pbMfPipRx = mrs->bmpMfourPipRx[1];
+    } else {
+        rs->pbMfTxBuff = 0;
+        rs->pbMfRxBuff = 0;
+        rs->pbMfPipTx = 0;
+        rs->pbMfPipRx = 0;
+    }
     #endif
     #endif
     
@@ -98373,7 +98704,7 @@ static int res_put_in(struct procRes_s *rs, struct mainRes_s *mrs, int idx)
         rs->pusbhost = mrs->usbhost[0];
         rs->pusbmh[0] = mrs->usbmh[0];
         rs->pusbmh[1] = mrs->usbmh[1];
-    } else if ((idx == 11) || (idx == 13) || (idx == 17) || (idx == 15) ) {
+    } else if ((idx == 11) || (idx == 13) || (idx == 17) || (idx == 15) || (idx == 22) ) {
         rs->pusbhost = mrs->usbhost[1];
         rs->pusbmh[0] = mrs->usbmh[0];
         rs->pusbmh[1] = mrs->usbmh[1];
