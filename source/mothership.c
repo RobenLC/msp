@@ -477,7 +477,7 @@ static int *totSalloc=0;
 /* wifi debug */
 #define DBG_WIFI_REAL (1)
 
-#define MSP_P_NUM (18) /* P0 ~ P15 */
+#define MSP_P_NUM (22) /* P0 ~ P15 */
 #define ASP_MEM_SLOT_NUM (4096)
 
 #define DIR_POOL_SIZE (1024)
@@ -56317,7 +56317,7 @@ static int fs151(struct mainRes_s *mrs, struct modersp_s *modersp)
     return 0;
 }
 
-#define DBG_BKN_GATE (1)
+#define DBG_BKN_GATE (0)
 #define MAX_152_EVENT (22)
 #define PRI_O_SEC_SELECT (-1)   // 0: select pri, 1: seclect sec, -1: disable
 static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
@@ -56381,6 +56381,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
     char *exptbuff=0;
     int bidx=0, mfidx=0, mstatus=0, waitidx=0;
     char magicaspc[8];
+    struct shmem_s *pRingc=0;
     
     ptlatcmd = waitIdxs;
     //exptbuff = aspMemalloc(32768, 10);
@@ -56689,16 +56690,17 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                 if (pllcmd[ins]) {
                     evcnt++;
                     switch(ins) {
-                    case 9:
-                    case 10:
+                    case 9: // 1
+                    case 10: // 2
+                        ons = ins - 8;
                         if (pllcmd[ins] == 'O') {
-                            //sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
-                            //print_f(mrs->plog, "fs152", mrs->log);
+                            sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
+                            print_f(mrs->plog, "fs152", mrs->log);
                             
-                            mrs_ipc_get(mrs, minfo, 2, 2);
+                            mrs_ipc_get(mrs, minfo, 2, ons);
                             
-                            //sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
-                            //print_f(mrs->plog, "fs152", mrs->log);
+                            sprintf_f(mrs->log, "[GW] get info: 0x%.2x + 0x%.2x org: 0x%.2x + 0x%.2x  \n", minfo[0], minfo[1], indexfo[0], indexfo[1]);
+                            print_f(mrs->plog, "fs152", mrs->log);
                             
                             mindex = ((minfo[0] & 0x3f) << 5) | (minfo[1] & 0x1f);
                             mindex = mindex & 0x3ff;
@@ -56724,7 +56726,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             if (ptinfomod) {
                                 addrc = (char *)&ptinfomod->CROP_POS_F1;
                                 
-                                ret = mrs_ipc_get(mrs, addrc, 16, 2);
+                                ret = mrs_ipc_get(mrs, addrc, 16, ons);
                                 if (ret != 16) {
                                     sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
                                     print_f(mrs->plog, "fs152", mrs->log);
@@ -56737,7 +56739,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             
                                 //dbgMetaUsb(ptinfomod);
                             } else {
-                                ret = mrs_ipc_get(mrs, cordbuf, 16, 2);
+                                ret = mrs_ipc_get(mrs, cordbuf, 16, ons);
                                 if (ret != 16) {
                                     sprintf_f(mrs->log, "Error !!! get crop ch result ret: %d != 16 \n", ret);
                                     print_f(mrs->plog, "fs152", mrs->log);
@@ -56764,7 +56766,7 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             //sprintf_f(mrs->log, "[GW] get ch from p3: %c (0x%.2x) \n", pllcmd[ins], pllcmd[ins]);
                             //print_f(mrs->plog, "fs152", mrs->log);
                             
-                            mrs_ipc_get(mrs, minfo, 2, 2);
+                            mrs_ipc_get(mrs, minfo, 2, ons);
 
                             sprintf_f(mrs->log, "[GW] get forward msg from p3: 0x%.2x + 0x%.2x to %d\n", minfo[0], minfo[1], minfo[1] % 2);
                             print_f(mrs->plog, "fs152", mrs->log);
@@ -57506,11 +57508,30 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             ret = aspBMPdecodeBuffStatusGet(&mrs->bmpDecMfour[mfidx], &mstatus);
                             //sprintf_f(mrs->log, "[GW] sample buff %d get status: 0x%.4x ret: %d \n", mfidx, mstatus, ret);
                             //print_f(mrs->plog, "fs152", mrs->log);
+
+                            #if 1 /* test */
+                            if ((mfidx % 2) == 0) {
+                                pollfo[0] = 's';
+                                pollfo[1] = chm;
                             
+                                mrs_ipc_put(mrs, pollfo, 2, 2);
+                            } else {
+                                pollfo[0] = 'p';
+                                pollfo[1] = chm;
+                            
+                                mrs_ipc_put(mrs, pollfo, 2, 1);
+                            }
+                            #elif 0
+                            pollfo[0] = 'p';
+                            pollfo[1] = chm;
+                            
+                            mrs_ipc_put(mrs, pollfo, 2, 1);
+                            #else
                             pollfo[0] = 's';
                             pollfo[1] = chm;
                             
                             mrs_ipc_put(mrs, pollfo, 2, 2);
+                            #endif
 
                         }
                         else {
@@ -58373,9 +58394,11 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                             totsz[ins+1] = 0;
                             ring_buf_init(ringbf[ins]);
                             ring_buf_init(ringbf[ins+1]);
-                            //ring_buf_init(&mrs->cmdTx);
+                            
+                            ring_buf_init(&mrs->cmdTx);
                             ring_buf_init(&mrs->dataRx);
-
+                            //ring_buf_init(&mrs->cmdRx);
+                            
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[0]);
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[1]);
                             aspBMPdecodeBuffInit(&mrs->bmpDecMfour[2]);
@@ -58865,69 +58888,57 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     totsz[ins] = 0;
                                 
                                     curbf->bsz |= lasflag;
+                                    
+                                    if (ins == 3) {
+                                        ptinfomod = ptscaninfoduo;
+                                    } else {
+                                        ptinfomod = ptscaninfo;
+                                    }
 
-                                    //sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x \n", val, lens, len, indexfo[0], indexfo[1]);
-                                    //print_f(mrs->plog, "fs152", mrs->log);
-
-                                    len = ring_buf_get(&mrs->dataRx, &addrc);
+                                    #if 1 /* test */
+                                    if (ptinfomod->PRI_O_SEC == 0) {
+                                        pRingc = &mrs->dataRx;
+                                    } else {
+                                        pRingc = &mrs->cmdTx;
+                                    }
+                                    #elif 1
+                                    pRingc = &mrs->dataRx;
+                                    #else
+                                    pRingc = &mrs->cmdTx;
+                                    #endif
+                                    
+                                    len = ring_buf_get(pRingc, &addrc);
                                     while (len <= 0) {
                                         usleep(100000);
-                                        len = ring_buf_get(&mrs->dataRx, &addrc);
+                                        len = ring_buf_get(pRingc, &addrc);
                                     }
                                     memset(addrc, 0, len);    
                                     
-                                    if (ins == 3) {
-                                        ptscaninfoduo->ASP_MAGIC_ASPC[0] = indexfo[0];
-                                        ptscaninfoduo->ASP_MAGIC_ASPC[1] = indexfo[1];
-                                        ptscaninfoduo->MPIONT_LEN = lens;
+                                    ptinfomod->ASP_MAGIC_ASPC[0] = indexfo[0];
+                                    ptinfomod->ASP_MAGIC_ASPC[1] = indexfo[1];
+                                    ptinfomod->MPIONT_LEN = lens;
 
-                                        val = ptscaninfoduo->EXTRA_POINT - ptscaninfoduo->ASP_MAGIC_ASPC;
+                                    val = ptinfomod->EXTRA_POINT - ptinfomod->ASP_MAGIC_ASPC;
                                         
-                                        //sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
-                                        //print_f(mrs->plog, "fs152", mrs->log);
+                                    //sprintf_f(mrs->log, "[GW] usb meta copy size: %d duo\n", val);                                
+                                    //print_f(mrs->plog, "fs152", mrs->log);
                                         
-                                        memcpy(addrc, ptscaninfoduo, val);
-                                        //shmem_dump(addrc, val);
-                                        //addrc += val;
+                                    memcpy(addrc, ptinfomod, val);
+                                    //shmem_dump(addrc, val);
+                                    //addrc += val;
 
-                                        memcpy(addrc + val, addrs, lens);
-                                        //shmem_dump(addrc + val, 32);
+                                    memcpy(addrc + val, addrs, lens);
+                                    //shmem_dump(addrc + val, 32);
 
-                                        //shmem_dump(addrc, val+lens);
+                                    //shmem_dump(addrc, val+lens);
                                         
-                                        if ((val + lens) > len) {
-                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
-                                            print_f(mrs->plog, "fs152", mrs->log);
-                                        }
-
-                                        ptinfomod = ptscaninfoduo;
+                                    if ((val + lens) > len) {
+                                        sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 2\n", val, lens, len);                                
+                                        print_f(mrs->plog, "fs152", mrs->log);
                                     }
-                                    else {
-                                        ptscaninfo->ASP_MAGIC_ASPC[0] = indexfo[0];
-                                        ptscaninfo->ASP_MAGIC_ASPC[1] = indexfo[1];
-                                        ptscaninfo->MPIONT_LEN = lens;
-
-                                        val = ptscaninfo->EXTRA_POINT - ptscaninfo->ASP_MAGIC_ASPC;
-
-                                        //sprintf_f(mrs->log, "[GW] usb meta copy size: %d \n", val);                                
-                                        //print_f(mrs->plog, "fs152", mrs->log);
-
-                                        memcpy(addrc, ptscaninfo, val);
-                                        //shmem_dump(addrc, val);
-                                        //addrc += val;
-
-                                        memcpy(addrc+val, addrs, lens);
-                                        //shmem_dump(addrc+val, 32);
-                                        
-                                        //shmem_dump(addrc, val+lens);
-
-                                        if ((val + lens) > len) {
-                                            sprintf_f(mrs->log, "[GW] WARNNING!!! meta + extro point = %d + %d > %d !!! - 1\n", val, lens, len);                                
-                                            print_f(mrs->plog, "fs152", mrs->log);
-                                        }
-                                        
-                                        ptinfomod = ptscaninfo;
-                                    }
+                                    
+                                    sprintf_f(mrs->log, "[GW] meta + extro point = %d + %d max:%d info: 0x%.2x + 0x%.2x PRI_O_SEC: %d \n", val, lens, len, indexfo[0], indexfo[1], ptinfomod->PRI_O_SEC);
+                                    print_f(mrs->plog, "fs152", mrs->log);
                                     
                                     //#if MFOUR_SIM_MODE
                                     if (simcmd[ins] == 'W') {
@@ -58940,10 +58951,22 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                     }
                                     //#else
                                     else {
-                                    ring_buf_prod(&mrs->dataRx);
-                                    
+                                    ring_buf_prod(pRingc);
+                                    #if 1 /* test */
+                                    if (ptinfomod->PRI_O_SEC == 0) {
                                     mrs_ipc_put(mrs, "o", 1, 2);
                                     mrs_ipc_put(mrs, indexfo, 2, 2);
+                                    } else {
+                                    mrs_ipc_put(mrs, "t", 1, 1);
+                                    mrs_ipc_put(mrs, indexfo, 2, 1);
+                                    }
+                                    #elif 1
+                                    mrs_ipc_put(mrs, "o", 1, 2);
+                                    mrs_ipc_put(mrs, indexfo, 2, 2);
+                                    #else
+                                    mrs_ipc_put(mrs, "t", 1, 1);
+                                    mrs_ipc_put(mrs, indexfo, 2, 1);
+                                    #endif
                                     }
                                     //#endif //#if MFOUR_SIM_MODE
                                     
@@ -60020,14 +60043,23 @@ static int p2(struct procRes_s *rs)
     struct sdFATable_s   *pftb=0;
     struct sdbootsec_s   *psec=0;
     struct aspConfig_s *pct=0, *pdt=0;
-    struct aspMetaData_s *pmeta;
+    struct aspMetaData_s *pcfgmeta;
     CFLOAT thrput, fltime;
-    struct aspMetaDataviaUSB_s *pusbmeta=0;
+    struct aspMetaDataviaUSB_s *pusbmeta=0, *pusbmetaOrg=0;
     struct aspCrop36_s *pcrp36=0;
     struct aspCropExtra_s *pcrpex=0;
     struct aspDoCropCalcu *pcrpdo=0;
     CFLOAT rotlf[2], rotup[2], rotrt[2], rotdn[2];
-    pmeta = rs->pmetain;
+    int org_len=0, mass_len=0, mbfidx=0, imgidx=0, mfbstat=0, exlen=0, yllen=0, val=0, mtlen=0, layeTot=0;
+    char chc=0, colrBits_L12=0, colrBits_L34=0, *colrBits_pt=0;
+    struct bitmapDecodeMfour_s *pdec=0;
+    struct bitmapDecodeItem_s *decjpg=0, *decmeta=0, *decexmt=0;
+    char *pmeta=0, *pexmt=0, *tch=0;
+    int *result=0, *org=0, *mass=0;
+    struct timespec crpS, crpE;
+    int tmCost=0;
+    
+    pcfgmeta = rs->pmetain;
 
     char ch, str[128], rx8[4], tx8[4], finfo[2], uinfo[32];
     char *addr, *laddr, *rx_buff;
@@ -60130,6 +60162,12 @@ static int p2(struct procRes_s *rs)
                     break;
                 case 'o':
                     cmode = 19;
+                    break;
+                case 'p':
+                    cmode = 20;
+                    break;
+                case 't':
+                    cmode = 21;
                     break;
                 default:
                     break;
@@ -61277,7 +61315,7 @@ static int p2(struct procRes_s *rs)
                 memcpy(rs->pmetain, laddr, 512);
                 msync(rs->pmetain, 512, MS_SYNC);
 
-                sprintf_f(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pmeta->ASP_MAGIC[0], pmeta->ASP_MAGIC[1]);
+                sprintf_f(rs->logs, "meta get magic number: 0x%.2x 0x%.2x \n", pcfgmeta->ASP_MAGIC[0], pcfgmeta->ASP_MAGIC[1]);
                 print_f(rs->plogs, "P2", rs->logs);
 
                 sprintf_f(rs->logs, "totsz: %d, len:%d opsz:%d ret:%d, break!\n", totsz, len, opsz, ret);
@@ -61746,6 +61784,437 @@ static int p2(struct procRes_s *rs)
                 memcpy(&uinfo[3], addr, 16);
 
                 rs_ipc_put(rs, uinfo, 19);
+                
+            }
+            #if 1//MFOUR_SIM_MODE
+            else if (cmode == 20) {
+                //sprintf_f(rs->logs, "sim cmode: %d\n", cmode);
+                //print_f(rs->plogs, "P2", rs->logs);
+
+                //ret = rs_ipc_get(rs, finfo, 2);
+                //sprintf(rs->logs, "__WAIT_CROP_CALCU_START_1__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                        
+                ret = rs_ipc_get(rs, &chc, 1);
+                
+                //sprintf(rs->logs, "__WAIT_CROP_CALCU_START_2__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                if (chc == 0x80) {
+                    mbfidx = 0;
+                } else {
+                    mbfidx = chc & 0x7f;
+                }
+
+                if (mbfidx > 3) {
+                    sprintf_f(rs->logs, "crop get buff index %d error!!! \n", mbfidx);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    break;
+                } else {
+                    //sprintf_f(rs->logs, "crop get buff index %d succed!!! \n", mbfidx);
+                    //print_f(rs->plogs, "P2", rs->logs);
+                }
+
+                pdec = rs->pbDecMfour[mbfidx];
+    
+                imgidx = 0;
+                mfbstat = 0;
+                ret = aspBMPdecodeBuffGetIdx(pdec, &imgidx);
+                ret = aspBMPdecodeBuffStatusGet(pdec, &mfbstat);
+                sprintf_f(rs->logs, "crop get mfbuff index %d, imgindex: %d, status 0x%x succeed!!! \n", mbfidx, imgidx, mfbstat);
+                print_f(rs->plogs, "P2", rs->logs);
+                
+                decjpg = &pdec->aspDecJpeg; //jpeg
+                decmeta = &pdec->aspDecMeta; //meta
+                decexmt = &pdec->aspDecMetaex; //meta
+
+                aspBMPdecodeItemGet(decmeta, &pmeta, &mtlen);
+                aspBMPdecodeItemGet(decexmt, &pexmt, &exlen);
+
+                pusbmeta = 0;
+                if ((mtlen > 0) && (exlen > 0)) {
+                    len = sizeof(struct aspMetaDataviaUSB_s) + exlen;
+                    addr = aspMemalloc(len, 2);
+                    if (!addr) {
+                        sprintf_f(rs->logs, "Error!!! failed to allocate memory for meta buff size: %d \n", len);
+                        print_f(rs->plogs, "P2", rs->logs);
+
+                        continue;
+                    }
+                    memset(addr, 0, len);
+
+                    pusbmeta = (struct aspMetaDataviaUSB_s *)addr;
+                    
+                    /*
+                    pusbmetaOrg = (struct aspMetaDataviaUSB_s *)pmeta;
+                    
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F1);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P1 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F2);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P2 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F3);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P3 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F4);
+                    cord = tmp & 0xffff;
+                    tmp = tmp >> 16;
+                    
+                    sprintf_f(rs->logs, "m4 before P4 (%4d, %4d) \n", tmp, cord);
+                    print_f(rs->plogs, "P2", rs->logs);
+                    */
+
+                    //sprintf_f(rs->logs, "get meta crop info mtlen: %d, exlen: %d buffsize: %d \n", mtlen, exlen, len);
+                    //print_f(rs->plogs, "P2", rs->logs);
+
+                    val = (pexmt[2] << 8) | pexmt[3];
+
+                    memcpy(pusbmeta, pmeta, len);
+                    pusbmeta->MPIONT_LEN = val;
+                    memcpy(pusbmeta->EXTRA_POINT, pexmt, exlen);
+                    totsz = sizeof(struct aspMetaDataviaUSB_s);
+                    totsz += pusbmeta->MPIONT_LEN;
+                    
+                    org_len = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
+
+                    tch = (char *)&pusbmeta->YLines_Recorded;
+                    mass_len = (int) ((tch[0]<<8) | tch[1]);
+
+                    layeTot = (int)((pusbmeta->BKNote_Total_Layers > 0) && (pusbmeta->BKNote_Total_Layers < 9)) ? pusbmeta->BKNote_Total_Layers:1;
+                    colrBits_pt = &pusbmeta->LEDMode;
+                            
+                    sprintf_f(rs->logs, "get meta info total len: %d  masslen: %d, M_LEN: %d, ylrec: %d, layerTot: %d\n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len*4+4, layeTot);
+                    print_f(rs->plogs, "P2", rs->logs);
+
+                    shmem_dump(colrBits_pt, 8);
+                            
+                    if (pusbmeta->MPIONT_LEN > 4) {
+
+                        org_len = 18*2;
+                        mass_len = mass_len * 4;
+
+                        sprintf(rs->logs, "__CROP_CALCU_START(%d)__", mbfidx); 
+                        tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                        result = aspMemalloc(sizeof(int)*8, 2);
+                        org = aspMemalloc(sizeof(int)*org_len, 2);
+                        mass = aspMemalloc(sizeof(int)*mass_len, 2);
+                        if ((!mass) || (!result) || (!org)) {
+                            sprintf_f(rs->logs, "crop calcu memory malloc size: %d failed !!! \n", (8+org_len+mass_len)*sizeof(int));
+                            print_f(rs->plogs, "P2", rs->logs);
+                            continue;
+                        }
+                        memset(result, 0, sizeof(int)*8);
+                        memset(org, 0, sizeof(int)*org_len);
+                        memset(mass, 0, sizeof(int)*mass_len);
+
+                        clock_gettime(CLOCK_REALTIME, &crpS);
+                        
+                        #if 1 /* skip crop calcu */
+                        ret = getOrg(org, addr, totsz, rs, layeTot);
+                        if (ret) {
+                            sprintf_f(rs->logs, "m4 getOrg ret: %d layeTot: %d\n", ret, layeTot);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+
+                        ret = getExtra(mass, addr, totsz, rs, layeTot);
+                        if (ret) {
+                            sprintf_f(rs->logs, "m4 getExtra ret: %d layeTot: %d\n", ret, layeTot);
+                            print_f(rs->plogs, "P2", rs->logs);
+                        }
+                        else {
+                            doCalculate(result, org, org_len, mass, mass_len, rs, 2);
+                        }
+                        #endif
+                        
+                        sprintf(rs->logs, "__CROP_CALCU_END(%d)__", mbfidx); 
+                        tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                        
+                        clock_gettime(CLOCK_REALTIME, &crpE);
+                        tmCost = time_diff(&crpS, &crpE, 1000);
+
+                        sprintf_f(rs->logs, "crop calcu time cost: %d.%d ms!!! \n", tmCost/1000, tmCost%1000);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        
+                        /*
+                        sprintf_f(rs->logs, "m4 get rotateP1 (%4d, %4d) \n", result[0], result[1]);
+                        print_f(rs->plogs, "P2", rs->logs);
+
+                        sprintf_f(rs->logs, "m4 get rotateP2 (%4d, %4d) \n", result[2], result[3]);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        
+                        sprintf_f(rs->logs, "m4 get rotateP3 (%4d, %4d) \n", result[4], result[5]);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        
+                        sprintf_f(rs->logs, "m4 get rotateP4 (%4d, %4d) \n", result[6], result[7]);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        */
+
+                        pusbmetaOrg = (struct aspMetaDataviaUSB_s *)pmeta;
+                        
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F1);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
+                        
+                        sprintf_f(rs->logs, "m4 confirm P1 (%4d, %4d) vs (%4d, %4d) \n", result[0], result[1], tmp, cord);
+                        print_f(rs->plogs, "P2", rs->logs);
+
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F2);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
+                        
+                        sprintf_f(rs->logs, "m4 confirm P2 (%4d, %4d) vs (%4d, %4d) \n", result[2], result[3], tmp, cord);
+                        print_f(rs->plogs, "P2", rs->logs);
+                        
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F3);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
+                        
+                        sprintf_f(rs->logs, "m4 confirm P3 (%4d, %4d) vs (%4d, %4d) \n", result[4], result[5], tmp, cord);
+                        print_f(rs->plogs, "P2", rs->logs);
+
+                        tmp = msb2lsb32(&pusbmetaOrg->CROP_POS_F4);
+                        cord = tmp & 0xffff;
+                        tmp = tmp >> 16;
+                        
+                        sprintf_f(rs->logs, "m4 confirm P4 (%4d, %4d) vs (%4d, %4d) \n", result[6], result[7], tmp, cord);
+                        print_f(rs->plogs, "P2", rs->logs);
+
+                        //addr = (char *) &pusbmeta->CROP_POS_F1;
+
+                    }
+                }
+                
+                memset(uinfo, 0, 32);
+                uinfo[0] = 'S';
+                uinfo[1] = 'f';
+                uinfo[2] = chc;
+
+                rs_ipc_put(rs, uinfo, 3);
+                
+            }
+            #endif //#if MFOUR_SIM_MODE
+            else if (cmode == 21) {
+                //sprintf_f(rs->logs, "cmode: %d\n", cmode);
+                //print_f(rs->plogs, "P2", rs->logs);
+
+                //sprintf(rs->logs, "__WAIT_CROP_CALCUL_START_1__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                ret = rs_ipc_get(rs, finfo, 2);
+
+                //sprintf(rs->logs, "__WAIT_CROP_CALCUL_START_2__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                
+                //sprintf_f(rs->logs, "get info: 0x%.2x + 0x%.2x \n", finfo[0], finfo[1]);
+                //print_f(rs->plogs, "P2", rs->logs);
+
+                //sleep(10);
+                len = ring_buf_cons(rs->pcmdTx, &addr);
+                if (len >= 0) {
+                    sprintf_f(rs->logs, "get crop len: %d\n", len);
+                    print_f(rs->plogs, "P2", rs->logs);
+                
+                    pusbmeta = aspMemalloc(len, 2);
+                    if (pusbmeta) {
+                        memset(pusbmeta, 0, len);
+                        memcpy(pusbmeta, addr, len);  
+                        
+                        //shmem_dump(addr, 228);
+                        //shmem_dump(addr+228, 32);
+                        
+                        msync(pusbmeta, len, MS_SYNC);
+
+                        if ((pusbmeta->ASP_MAGIC_ASPC[0] == finfo[0]) && 
+                            (pusbmeta->ASP_MAGIC_ASPC[1] == finfo[1])) {
+                            
+                            totsz = sizeof(struct aspMetaDataviaUSB_s);
+                            org_len = (pusbmeta->EXTRA_POINT[2] << 8) | pusbmeta->EXTRA_POINT[3];
+                            totsz += pusbmeta->MPIONT_LEN;
+
+                            tch = (char *)&pusbmeta->YLines_Recorded;
+                            mass_len = (int) ((tch[0]<<8) | tch[1]);
+
+                            layeTot = (int)((pusbmeta->BKNote_Total_Layers > 0) && (pusbmeta->BKNote_Total_Layers < 9)) ? pusbmeta->BKNote_Total_Layers:1;
+                            colrBits_pt = &pusbmeta->LEDMode;
+                            
+                            //shmem_dump(addr, totsz);
+                            sprintf_f(rs->logs, "get total len: %d parsing len: %d, M_LEN: %d, yLine_rec: %d layeTot: %d, \n", totsz, org_len, (int)pusbmeta->MPIONT_LEN, mass_len, layeTot);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            shmem_dump(colrBits_pt, 8);
+
+                            if (pusbmeta->MPIONT_LEN > 4) {
+
+                                org_len = 18*2;
+                                mass_len = mass_len * 4;
+
+                                sprintf(rs->logs, "__CROP_CALCUL_START__"); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                        
+                                result = aspMemalloc(sizeof(int)*8, 2);
+                                org = aspMemalloc(sizeof(int)*org_len, 2);
+                                mass = aspMemalloc(sizeof(int)*mass_len, 2);
+                                if (!mass) {
+                                    sprintf_f(rs->logs, "malloc size: %d failed !!! \n", sizeof(int)*mass_len);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                
+                                memset(result, 0, sizeof(int)*8);
+                                memset(org, 0, sizeof(int)*org_len);
+                                memset(mass, 0, sizeof(int)*mass_len);
+                                
+                                clock_gettime(CLOCK_REALTIME, &crpS);
+                        
+                                ret = getOrg(org, addr, totsz, rs, layeTot);
+                                if (ret) {
+                                    sprintf_f(rs->logs, "getOrg ret: %d \n", ret);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                
+                                ret = getExtra(mass, addr, totsz, rs, layeTot);
+                                if (ret) {
+                                    sprintf_f(rs->logs, "getExtra ret: %d \n", ret);
+                                    print_f(rs->plogs, "P2", rs->logs);
+                                }
+                                else {
+                                    //clock_gettime(CLOCK_REALTIME, &crpE);
+                                    //tmCost = time_diff(&crpS, &crpE, 1000);
+
+                                    //sprintf_f(rs->logs, "point deal time cost: %d.%d ms !!! \n", tmCost/1000, tmCost%1000);
+                                    //print_f(rs->plogs, "P2", rs->logs);                        
+
+                                    //clock_gettime(CLOCK_REALTIME, &crpS);
+
+                                    doCalculate(result, org, org_len, mass, mass_len, rs, 2);
+                                }
+                                
+                                sprintf(rs->logs, "__CROP_CALCUL_END__"); 
+                                tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                clock_gettime(CLOCK_REALTIME, &crpE);
+                                tmCost = time_diff(&crpS, &crpE, 1000);
+
+                                sprintf_f(rs->logs, "cropping calcu time cost: %d.%d ms !!! \n", tmCost/1000, tmCost%1000);
+                                print_f(rs->plogs, "P2", rs->logs);                        
+                                
+                                sprintf_f(rs->logs, "get rotateP1 (%4d, %4d) \n", result[0], result[1]);
+                                print_f(rs->plogs, "P2", rs->logs);
+
+                                sprintf_f(rs->logs, "get rotateP2 (%4d, %4d) \n", result[2], result[3]);
+                                print_f(rs->plogs, "P2", rs->logs);
+                                
+                                sprintf_f(rs->logs, "get rotateP3 (%4d, %4d) \n", result[4], result[5]);
+                                print_f(rs->plogs, "P2", rs->logs);
+                                
+                                sprintf_f(rs->logs, "get rotateP4 (%4d, %4d) \n", result[6], result[7]);
+                                print_f(rs->plogs, "P2", rs->logs);
+                                
+                                tmp = (uint32_t)result[0];
+                                cord = (uint32_t)result[1];
+                                cord = cord | (tmp <<16);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F1, cord);
+                                
+                                tmp = (uint32_t)result[2];
+                                cord = (uint32_t)result[3];
+                                cord = cord | (tmp <<16);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F2, cord);
+                                
+                                tmp = (uint32_t)result[4];
+                                cord = (uint32_t)result[5];
+                                cord = cord | (tmp <<16);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F3, cord);
+                                
+                                tmp = (uint32_t)result[6];
+                                cord = (uint32_t)result[7];
+                                cord = cord | (tmp <<16);
+                                lsb2Msb32(&pusbmeta->CROP_POS_F4, cord);
+                                
+                                addr = (char *) &pusbmeta->CROP_POS_F1;
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_OUTLOOP__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_MEM_FAST__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                //memset(uinfo, 0, 32);
+                                uinfo[0] = 'O';
+                                uinfo[1] = finfo[0];
+                                uinfo[2] = finfo[1];
+                                memcpy(&uinfo[3], addr, 16);
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_IN_FAST__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                                rs_ipc_put(rs, uinfo, 19);
+
+                                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_OUT_FAST__"); 
+                                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                
+                                continue; //break the loop quickly
+                            }
+                            else {
+                                sprintf_f(rs->logs, "no crop data, MPIONT_LEN: %d \n", pusbmeta->MPIONT_LEN);
+                                print_f(rs->plogs, "P2", rs->logs);
+
+                                addr = (char *) &pusbmeta->CROP_POS_F1;
+                                memset(addr, 0, 16);
+                            }
+                        }
+                        else {
+                            sprintf_f(rs->logs, "Error!!! info not match !!!0x%.2x 0x%.2x vs 0x%.2x 0x%.2x \n", finfo[0], finfo[1], pusbmeta->ASP_MAGIC_ASPC[0], pusbmeta->ASP_MAGIC_ASPC[1]);
+                            print_f(rs->plogs, "P2", rs->logs);
+
+                            //shmem_dump(addr, 512);
+                            //dbgMetaUsb(pusbmeta);
+
+                            memset(addr, 0, 16);
+                        }
+
+                        //dbgMetaUsb(pusbmeta);
+                    } 
+                    else {
+                        sprintf_f(rs->logs, "Error!!! allocate memory for usb meta failed !!!\n");
+                        print_f(rs->plogs, "P2", rs->logs);
+                        
+                        memset(addr, 0, 16);
+                    }
+                }
+                else {
+                    addr = aspMemalloc(16, 2);
+                    memset(addr, 0, 16);
+                }
+
+                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_MEM__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+
+                //memset(uinfo, 0, 32);
+                uinfo[0] = 'O';
+                uinfo[1] = finfo[0];
+                uinfo[2] = finfo[1];
+                memcpy(&uinfo[3], addr, 16);
+                
+                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_IN__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
+                
+                rs_ipc_put(rs, uinfo, 19);
+
+                //sprintf(rs->logs, "__CROP_CALCUL_END_SENDMSG_OUT__"); 
+                //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
                 
             }
             else {
@@ -62267,8 +62736,8 @@ static int p3(struct procRes_s *rs)
                 }
             }
             else if (cmode == 8) {
-                //sprintf_f(rs->logs, "cmode: %d\n", cmode);
-                //print_f(rs->plogs, "P3", rs->logs);
+                sprintf_f(rs->logs, "cmode: %d\n", cmode);
+                print_f(rs->plogs, "P3", rs->logs);
 
                 //sprintf(rs->logs, "__WAIT_CROP_CALCUL_START_1__"); 
                 //tmCost = dbgShowTimeStamp(rs->logs,  NULL, rs, 14, rs->logs);
@@ -94697,7 +95166,7 @@ static int p19(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, "P19", rs->logs);
                 
-                bmpcolrtb = aspMemalloc(1078, 12);
+                bmpcolrtb = aspMemalloc(1078, 19);
                 if (!bmpcolrtb) {
                     sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
                     print_f(rs->plogs, "P19", rs->logs);                                
@@ -94749,9 +95218,9 @@ static int p19(struct procRes_s *rs)
                 cutcnt =0;
                 cutnum = msb2lsb16(&metaRx->BKNA_NUM);
 
-                cutsides = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                cutsides = aspMemalloc(cutnum*sizeof(int)*2, 19);
                 memset(cutsides, 0, cutnum*sizeof(int)*2);
-                cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 19);
                 memset(cutlayers, 0, cutnum*sizeof(int)*2);
                 ret = 0;
                 
@@ -94882,7 +95351,7 @@ static int p19(struct procRes_s *rs)
                 //sprintf_f(rs->logs, "[BMP] resulution cfg: %d, dpi: %d\n", tmp, bdpi);
                 //print_f(rs->plogs, "P19", rs->logs);
                 
-                bmpcolrtb = aspMemalloc(1078, 12);
+                bmpcolrtb = aspMemalloc(1078, 19);
                 if (!bmpcolrtb) {
                     sprintf_f(rs->logs, "[BMP] allocate memory failed size: %d \n", 1078);
                     print_f(rs->plogs, "P19", rs->logs);                                
@@ -94934,9 +95403,9 @@ static int p19(struct procRes_s *rs)
                 cutcnt =0;
                 cutnum = msb2lsb16(&metaRx->BKNA_NUM);
 
-                cutsides = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                cutsides = aspMemalloc(cutnum*sizeof(int)*2, 19);
                 memset(cutsides, 0, cutnum*sizeof(int)*2);
-                cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 12);
+                cutlayers = aspMemalloc(cutnum*sizeof(int)*2, 19);
                 memset(cutlayers, 0, cutnum*sizeof(int)*2);
                 ret = 0;
                 
@@ -95045,7 +95514,7 @@ static int p19(struct procRes_s *rs)
             break;
         }
 
-        aspMemClear(aspMemAsign, asptotMalloc, 12);
+        aspMemClear(aspMemAsign, asptotMalloc, 19);
     }
 
     p19_end(rs);
