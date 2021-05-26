@@ -3929,6 +3929,8 @@ static int aspBMPdecodeBuffGet(struct bitmapDecodeMfour_s *pdcbuf, int *bidx, in
     if (!bmax) return -2;
 
     asp_mem_barrier();
+
+    //sleep(2);
     
     for (idx=0; idx < bmax; idx++) {
         pdec = &pdcbuf[idx];
@@ -57641,8 +57643,10 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 mindex = ((chindex[0] & 0x3f) << 5) | (chindex[1] & 0x1f);
                                 mindex = mindex & 0x3ff;
                                 
-                                sprintf_f(mrs->log, "[GW] pll%d get midx: %d (%d:%d)\n", ins, mindex, ptlatcmd[15], ptlatcmd[16]);
+                                sprintf_f(mrs->log, "[GW] pll%d try to get buff,  midx: %d (%d:%d) cur=%d\n", ins, mindex, ptlatcmd[15], ptlatcmd[16], ptlatcmd[ins]);
                                 print_f(mrs->plog, "fs152", mrs->log);
+
+                                ret = -1;
                                 
                                 if ((ptlatcmd[15] == 0) && (ptlatcmd[16] == 0)) {
                                     ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
@@ -57651,7 +57655,18 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
 
                                     waitidx = 1;
                                 }
-                                else if (ptlatcmd[ins]) {
+                                else if ((ptlatcmd[15] && ptlatcmd[16]) && 
+                                    (((ptlatcmd[15] < ptlatcmd[16]) && (ptlatcmd[ins] == ptlatcmd[15])) || ((ptlatcmd[16] < ptlatcmd[15]) && (ptlatcmd[ins] == ptlatcmd[16])))) {
+
+                                    //sleep(2);
+                                    ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
+                                    sprintf_f(mrs->log, "[GW] and lookback get BMP decode buff id: %d ret: %d to imgidx: %d waitidx: %d id: %d\n", bidx, ret, mindex, ptlatcmd[ins], ins);
+                                    print_f(mrs->plog, "fs152", mrs->log);
+                                }
+                                else if (((ptlatcmd[15] && !ptlatcmd[16]) || (!ptlatcmd[15] && ptlatcmd[16])) && 
+                                    ((ptlatcmd[15] && (ptlatcmd[ins] == ptlatcmd[15])) || (ptlatcmd[16] && (ptlatcmd[ins] == ptlatcmd[16])))) {
+
+                                    //sleep(2);
                                     ret = aspBMPdecodeBuffGet(mrs->bmpDecMfour, &bidx, 4);
                                     sprintf_f(mrs->log, "[GW] lookback get BMP decode buff id: %d ret: %d to imgidx: %d waitidx: %d id: %d\n", bidx, ret, mindex, ptlatcmd[ins], ins);
                                     print_f(mrs->plog, "fs152", mrs->log);
@@ -57659,18 +57674,35 @@ static int fs152(struct mainRes_s *mrs, struct modersp_s *modersp)
                                 else {
                                     sprintf_f(mrs->log, "[GW] %d get BMP decode buff busy (%d, %d) \n", ins, ptlatcmd[15], ptlatcmd[16]);
                                     print_f(mrs->plog, "fs152", mrs->log);
-                                    
-                                    ret = -1;
                                 }
                                 
                                 if (ret < 0) {
                                     bidx = -1;
 
                                     //latcmd[ins] = 0xff;
-                                    //ptlatcmd[ins] = mindex;
+
                                     if (ptlatcmd[ins] == 0) {
-                                        ptlatcmd[ins] = waitidx;
-                                        waitidx ++;
+                                        //ptlatcmd[ins] = waitidx;
+                                        ptlatcmd[ins] = mindex;
+
+                                        if (ins == 15) {
+                                            waitidx = 16;
+                                        } else {
+                                            waitidx = 15;
+                                        }
+
+                                        if (ptlatcmd[waitidx]) {
+                                            if ((ptlatcmd[ins] > ptlatcmd[waitidx]) && ((ptlatcmd[ins] - ptlatcmd[waitidx]) > 30)) {
+                                                ptlatcmd[waitidx] = ptlatcmd[ins] + 1;
+                                            }
+                                            else if ((ptlatcmd[waitidx] > ptlatcmd[ins]) && ((ptlatcmd[waitidx] - ptlatcmd[ins]) > 30)) {
+                                                ptlatcmd[ins] = ptlatcmd[waitidx] + 1;
+                                            }
+                                            else if (ptlatcmd[waitidx] == ptlatcmd[ins]){
+                                                ptlatcmd[waitidx] = ptlatcmd[waitidx] + 1;
+                                            }
+                                        }
+
                                     }
 
                                     //pllcmd[ins] = 0xff;
@@ -72595,12 +72627,12 @@ static int p8(struct procRes_s *rs)
 #define USB_POLLTIME_US (1000)
 
 #if SAMPLE_WARM_UP
-#define SIM_NUM_WARM  3
+#define SIM_NUM_WARM  5
 #define SIM_LATE_US_W (40000)
 #endif
 
 #if AUTO_RUN_SIM
-#define SIM_NUM_SIM  20
+#define SIM_NUM_SIM  1000
 #define SIM_LATE_US_S (60000)
 #endif
 
@@ -81251,6 +81283,7 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     #if AUTO_RUN_SIM /* enable sim */
                                     //cmd = 0x11;
                                     opc = 0x11;
+                                    //opc = 0x10;
                                     dat = 0x00;
 
                                     iubs->opinfo = opc << 8 | dat;
@@ -82282,10 +82315,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                     print_f(rs->plogs, "P11", rs->logs);
                                 } else {
                                     
-                                    cswerr = mbstats;
                                     pagerst = val;
                     
-                                    sprintf_f(rs->logs, "[DV] get csw err and page rest: 0x%.2x, %d \n", cswerr, pagerst);
+                                    sprintf_f(rs->logs, "[DV] get mbstats and page rest: 0x%.2x, %d \n", mbstats, pagerst);
                                     print_f(rs->plogs, "P11", rs->logs);
                     
                                     err = aspBMPdecodeItemGet(&pmbf->aspDecMeta, &bfmt, &mtlen);
@@ -82305,7 +82337,9 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                                         print_f(rs->plogs, "P11", rs->logs);
 
                                         
-                                        if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
+                                        //if ((bflens[ix] == 0) && (cswerr) && (!pagerst)) { // the last page
+                                        //if ((bflens[ix] == 0) && (mbstats)) { // the last page                                        
+                                        if ((bflens[ix] == 0) && (mbstats) && (!pagerst)) { // the last page                                        
                                         //if (cswerr) { // the last page
                                             pbf = bfs[ix] + bflens[ix];
                     
@@ -82315,10 +82349,16 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
 
                                             pagerst = ix + 1;
 
+                                            //opc = 0;
+                                            
+                                            #if 0
                                             if (opc == 0x11) {
-                                                lrst = 1; 
                                                 opc = 0x0f;
+                                                lrst = 1; 
                                             }
+                                            #endif
+
+                                            cswerr = mbstats;
                                             
                                             sprintf_f(rs->logs, "[DV] output bfs last %d. addr: 0x%.8x len: %d ret: %d, cswerr: %d, pagerst: %d - 2 lrst: %d \n", ix, (uint32_t)bfs[ix], bflens[ix], err, cswerr, pagerst, lrst);
                                             print_f(rs->plogs, "P11", rs->logs);
@@ -82488,6 +82528,10 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                         sprintf_f(rs->logs, "[DV] Error!!! can't free the buff index: %d pmbf: 0x%.8x \n", mbufidx, (uint32_t)pmbf);
                         print_f(rs->plogs, "P11", rs->logs);
                     }
+
+                    //if (opc == 0) {
+                    //    cmd = 0;
+                    //}
                 }
 
                 continue;
@@ -85726,8 +85770,13 @@ static int p11(struct procRes_s *rs, struct procRes_s *rsd, struct procRes_s *rc
                 //cmd = 0;
 
                 cmd = 0x12;
-                //opc = 0x10;
+                
+                #if AUTO_RUN_SIM
+                opc = 0x11;
+                #else
                 opc = 0x0f;
+                #endif
+                
                 dat = 0x85;
 
                 iubs->opinfo = opc << 8 | dat;
@@ -88856,7 +88905,7 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     return 0;
 }
 
-#define MEM_SPEEDUP_READ_EN (1)
+#define MEM_SPEEDUP_READ_EN (0)
 static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max, int opc)
 {
    #define PRESET_ADDRESS_NUM (2)
@@ -89706,7 +89755,7 @@ static int save_done_area(struct procRes_s *rs, int clidx, int mfidx)
 }
 
 #define SAVE_DONE_IMG (0)
-#define LOG_P12_EN (0)
+#define LOG_P12_EN (1)
 static int p12(struct procRes_s *rs)
 {
     char cmdstr[] = "/usr/local/projects/BANK_COMMON/fw_cortex_m4.sh start BANK_COMMON";
@@ -91284,9 +91333,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                         print_f(rs->plogs, sp, rs->logs);
                                         continue;
                                     }
-                                } else {
+                                }
+                                else {
                                     chr = 0;
                                 }
+                                
         
                                 uimCylcnt = CYCLE_LEN;
                                 
@@ -91559,7 +91610,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     puimTmp = puimUse->uimNxt;
                                     ix++;
                                 }
-                            } else {
+                            }
+                            else {
                                 ix=0;
                                 cindex = 0;
                                 puimTmp = puimCnTH;
@@ -91603,11 +91655,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 puimGet = puimNxt;
                                 
                                 #if 1//LOG_JPGH_EN
-                                sprintf_f(rs->logs, "[DV] puimGet: 0x%.3x %d/%d\n", puimGet->uimIdex, puimGet->uimGetCnt, puimGet->uimCount);
+                                sprintf_f(rs->logs, "[DV] puimGet: 0x%.3x(%d) %d/%d\n", puimGet->uimIdex, puimGet->uimIdex & 0x3ff, puimGet->uimGetCnt, puimGet->uimCount);
                                 print_f(rs->plogs, sp, rs->logs);
                                 #endif
                             } else {
-                                #if LOG_JPGH_EN
+                                #if 1//LOG_JPGH_EN
                                 sprintf_f(rs->logs, "[DV] puimGet is null \n");
                                 print_f(rs->plogs, sp, rs->logs);
                                 #endif
@@ -91617,8 +91669,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                             puimTmp = puimCnTH;
                             while(puimTmp) {
                             
-                                #if 0//LOG_JPGH_EN
-                                sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
+                                #if LOG_JPGH_EN
+                                sprintf_f(rs->logs, "[DV] page.%d - 0x%.2x(%d) %d:%d (addr:0x%.8x)\n", ix, puimTmp->uimIdex, puimTmp->uimIdex & 0x3ff, puimTmp->uimGetCnt, puimTmp->uimCount, (uint32_t)puimTmp);
                                 print_f(rs->plogs, sp, rs->logs);
                                 #endif
         
@@ -91631,7 +91683,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                     
                             waitCylen = ix;
         
-                            #if LOG_JPGH_EN
+                            #if 1//LOG_JPGH_EN
                             sprintf_f(rs->logs, "[DV] wait page number: %d, wait page rest: %d\n", waitCylen, pagerst);
                             print_f(rs->plogs, sp, rs->logs);
                             #endif
@@ -91684,6 +91736,11 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 puimTmp = puimCnTH;
                                 puimUse = puimCnTH;
                                 while (puimTmp) {
+                                    #if 0
+                                    sprintf_f(rs->logs, "[DV] max search %d(%d) vs %d(%d)\n", (puimTmp->uimIdex & 0x3ff), puimTmp->uimCount, (puimUse->uimIdex & 0x3ff), puimUse->uimCount);
+                                    print_f(rs->plogs, sp, rs->logs);
+                                    #endif
+
                                     if ((puimTmp->uimIdex & 0x3ff) > (puimUse->uimIdex & 0x3ff)) {
                                         if (puimTmp->uimCount > 0) {
                                             puimUse = puimTmp;
@@ -91728,6 +91785,8 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                                 }
                             }
                             #endif
+
+                            //usleep(50000);
                             
                             break;
                         } 
@@ -93780,6 +93839,7 @@ static int p16(struct procRes_s *rs)
                     pipRet = poll(pllfd, 1, 500);
                     if (pipRet > 0) {
                         ret = read(pllfd[0].fd, &chm, 1);
+                        
                         //sprintf_f(rs->logs, "m4tx get chm: %c [0x%.2x] for m4tx\n", chm, chm);
                         //print_f(rs->plogs, "P16", rs->logs);
 
@@ -93852,8 +93912,8 @@ static int p16(struct procRes_s *rs)
                             
                             break;
                         case 'e':
-                            //sprintf_f(rs->logs, "complete \n");
-                            //print_f(rs->plogs, "P16", rs->logs);
+                            sprintf_f(rs->logs, "complete \n");
+                            print_f(rs->plogs, "P16", rs->logs);
                             break;
                         default:
                             sprintf_f(rs->logs, "Error m4tx get[0x%.2x] unknown command !!!\n", mfcmd);
@@ -94091,6 +94151,7 @@ static int p17(struct procRes_s *rs)
                     
                     //sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
                     //print_f(rs->plogs, "P17", rs->logs);
+                    //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
 
                     clock_gettime(CLOCK_REALTIME, rs->rtpBk[0]);
                     msync(rs->rtpBk[0], sizeof(struct timespec), MS_SYNC);
@@ -94754,6 +94815,11 @@ static int p18(struct procRes_s *rs)
 
     //mfourSetPipEpt1(pipMfTx);
     //mfourSetPipEpt2(pipMfRx);
+
+    //sleep(10);
+    
+    //sprintf_f(rs->logs, "mfour api input buff[0x%.8x] tx[0x%.8x] rx[0x%.8x]\n", (uint32_t)rs->pbMfTxBuff, (uint32_t)rs->pbMfPipTx, (uint32_t)rs->pbMfPipRx);
+    //print_f(rs->plogs, "P18", rs->logs);
     
     mfourmaind(rs->pbMfTxBuff, rs->pbMfPipTx, rs->pbMfPipRx);
     
@@ -94971,7 +95037,7 @@ static int p19(struct procRes_s *rs)
                                 sprintf_f(rs->logs, "process current buff id: %d cid: %d \n", mfbidx, cid);
                                 print_f(rs->plogs, "P19", rs->logs);
                 
-                                ret = handle_cmd_require_areaR(rs, cid, mfbidx, 12);
+                                ret = handle_cmd_require_areaR(rs, cid, mfbidx, 19);
                                 if (ret) {
                                     sprintf_f(rs->logs, "Error!!! mfour require area failed ret: %d \n", ret);
                                     print_f(rs->plogs, "P19", rs->logs);
@@ -95692,6 +95758,7 @@ static int p20(struct procRes_s *rs)
                     pipRet = poll(pllfd, 1, 500);
                     if (pipRet > 0) {
                         ret = read(pllfd[0].fd, &chm, 1);
+                        
                         //sprintf_f(rs->logs, "m4tx get chm: %c [0x%.2x] for m4tx\n", chm, chm);
                         //print_f(rs->plogs, "P20", rs->logs);
 
@@ -96003,7 +96070,8 @@ static int p21(struct procRes_s *rs)
                     
                     //sprintf_f(rs->logs, "m4rx print the cmd recv in:\n");
                     //print_f(rs->plogs, "P21", rs->logs);
-
+                    //dbgRjobCmd(&outcmd, sizeof(mfour_rjob_cmd));
+                    
                     clock_gettime(CLOCK_REALTIME, rs->rtpBk[0]);
                     msync(rs->rtpBk[0], sizeof(struct timespec), MS_SYNC);
                     
@@ -96666,6 +96734,11 @@ static int p22(struct procRes_s *rs)
 
     //mfourSetPipEpt1(pipMfTx);
     //mfourSetPipEpt2(pipMfRx);
+
+    //sleep(10);
+    
+    //sprintf_f(rs->logs, "mfour api input buff[0x%.8x] tx[0x%.8x] rx[0x%.8x]\n", (uint32_t)rs->pbMfTxBuff, (uint32_t)rs->pbMfPipTx, (uint32_t)rs->pbMfPipRx);
+    //print_f(rs->plogs, "P22", rs->logs);
     
     mfourmaind(rs->pbMfTxBuff, rs->pbMfPipTx, rs->pbMfPipRx);
     
