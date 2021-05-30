@@ -80,14 +80,15 @@ LIBS += -lwayland-server
 LIBS += -lwayland-egl
 LIBS += -lEGL
 LIBS += -lGLESv2
-LIBS += -lGLESv1_CM
+#LIBS += -lGLESv1_CM
 LIBS += -ljpeg
 #LIBS += -lturbojpeg
 #LIBS += -lopencv_core
 
 .PHONY : clean TARGET FORCE
 
-TARGET_FILE =  out/st_mothership.bin out/mainrot.bin out/eglex.bin
+#TARGET_FILE =  out/st_mothership.bin out/mainrot.bin out/eglex.bin
+TARGET_FILE =  out/st_mothership.bin
 
 TARGET : $(TARGET_FILE)
 
