@@ -140,7 +140,7 @@ typedef struct
 }   t_ImageParam;  
 #endif
 
-#define LOG_ALL_DISABLE (0)
+#define LOG_ALL_DISABLE (1)
 
 #define ONLY_ONE_USB (0)
 #if DISABLE_USB
@@ -180,7 +180,7 @@ typedef struct
 #define AP_AUTO (0)
 #define AP_CLR_STATUS (0)
 
-#define PIC_ALL_SEND (1)
+#define PIC_ALL_SEND (0)
 #define MFOUR_IMG_SEND_BACK (0)
 #define MFOUR_BMP_SEND_BACK (1)
 #define MFOUR_SIM_MODE_BMP (0)
@@ -72633,7 +72633,7 @@ static int p8(struct procRes_s *rs)
 
 #if AUTO_RUN_SIM
 #define SIM_NUM_SIM  1000
-#define SIM_LATE_US_S (60000)
+#define SIM_LATE_US_S (50000)
 #endif
 
 #define UNPLUG_SCAN_MACHINE (0)
@@ -88905,7 +88905,7 @@ static int send_image_in_jpg(struct procRes_s *rs, int mbidx, int midx, int *max
     return 0;
 }
 
-#define MEM_SPEEDUP_READ_EN (0)
+#define MEM_SPEEDUP_READ_EN (1)
 static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max, int opc)
 {
    #define PRESET_ADDRESS_NUM (2)
@@ -89067,7 +89067,6 @@ static int send_image_in_bmp(struct procRes_s *rs, int mbidx, int midx, int *max
 
         //sprintf_f(rs->logs,"sample src copy done addr: 0x%.8x size: %d sel: %d(%d)\n", (uint32_t)bmpsrc, size, sel, imgidx);
         //print_f(rs->plogs, "fIle", rs->logs);
-        
     }
     
     tail = size % 512;
@@ -92220,6 +92219,7 @@ static int jpghostd(struct procRes_s *rs, char *sp, int dlog, int midx)
                 break;
                 case FILE_FORMAT_RAW:
                 ret = send_image_in_bmp(rs, buffidx, midx, &simMax, opc);
+                //ret = send_image_in_bmp(rs, buffidx, midx, &simMax, 0x11);
                 if (ret) {
                     sprintf_f(rs->logs, "[SIM] Error!!! m4 sim get bmp ret: %d \n", ret);
                     print_f(rs->plogs, sp, rs->logs); 
