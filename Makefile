@@ -131,6 +131,7 @@ $(BKOCR_LIB) :
 	@echo
 
 $(M4_LIB): FORCE
+	$(MAKE) -C ./m4
 	$(MAKE) -C ./m4 clean
 	$(MAKE) -C ./m4
 	@echo
